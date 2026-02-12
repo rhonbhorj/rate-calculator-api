@@ -20,14 +20,71 @@ class Api extends REST_Controller
         $this->authorization_token = new Authorization_Token();
     }
 
-    public function index_get()
+    public function index_post()
     {   
-        $data['status'] = false;
-        $data['message'] = 'Forbidden';
-        $this->response($data, Rest_Controller::HTTP_FORBIDDEN);
+        $AVR = true;
+
+        $today = date('Y-m-d H:i:s');
+
+        $head = checkHeader($this);
+
+        if ($head['status'] == false) {
+
+            $AVR = false;
+
+            $resp = $head;
+        } else {
+
+            $this->form_validation->set_rules('page', 'page', 'trim|required');
+
+            $contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '';
+
+            switch ($contentType) {
+                case 'application/json':
+                    $json = file_get_contents('php://input');
+                    $_POST = json_decode($json, true);
+                    $datapost = $_POST;
+                    break;
+                default:
+                    $datapost = array(
+                        'page' => $this->input->post('page', true)
+                    );
+            }
+
+            if ($this->form_validation->run() == FALSE) {
+                $FVE = $this->form_validation->error_array();
+                $this->response([
+                    'status' => false,
+                    'message' => 'Error validation',
+                    'data' => $FVE
+                ], Rest_Controller::HTTP_UNAUTHORIZED);
+            } else {
+                $pdata['page'] = strip_tags(trim($datapost['page']));
+                $pageData = $this->modelrepo->get_page_details($pdata);
+
+                if ($pageData == false) {
+                    $AVR = false;
+                    $resp['status'] = false;
+                    $resp['message'] = "no data";
+                } else {
+                    
+                    $resp['status'] = true;
+                    $resp['status_code'] = 200;
+                    $resp['data'] = $pageData;
+                }
+            }
+        }
+
+        if ($AVR) {
+
+            $this->response($resp, Rest_Controller::HTTP_OK);
+        } else {
+
+            $this->response($resp, Rest_Controller::HTTP_UNAUTHORIZED);
+        }
     }
 
-    public function index_post()
+    public function index_get()
     {
         $data['status'] = false;
         $data['message'] = 'Forbidden';

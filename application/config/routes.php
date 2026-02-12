@@ -54,47 +54,8 @@ $route['404_override'] = 'custom404';
 
 $route['default_controller'] = 'api';
 
-$route['club-payment'] = 'club/payment';
-$route['club-region-list'] = 'club/club_region_list';
 
-
-$route['generate-token'] = 'api/generate_token';
-$route['club-description'] = 'club/deacription_detials';
-$route['create-club'] = 'club/create_club'; 
-$route['create-region'] = 'account/create_region'; 
-$route['create-club-description'] = 'club/create_club_description';
-$route['club-description-set-status'] = 'club/club_description_set_status';
-$route['club-set-status'] = 'club/club_set_status';
-$route['translate_uri_dashes'] = FALSE ;
-
-$route['transaction-status'] = 'transaction/transaction_status';
-
-
-
-
-//manage api endpoint 
-$route['login'] = 'auth/login';
-$route['logout'] = 'auth/logout';
-
-$route['get-payment-data'] = 'report/get_payment_data';
-$route['get-payment-data-by-region'] ='report/get_payment_data_by_region';
-
-$route['manage-club-list'] = 'report/manage_club_list';
-$route['club-list'] = 'report/club_list';
-$route['all-club-description'] = 'report/all_deacription_detials';
-
-
-// create ccount
-$route['get-user-type'] = 'account/usertype_list';
-$route['create-account'] = 'account/create_account';
-
-
-
-$route['manage-all-club-list'] = 'account/manage_all_club_list';
-$route['manage-all-region-list'] = 'account/manage_all_region_list';
-$route['manage-all-description-list'] = 'account/manage_all_description_list';
-
-
+$route['v1/page'] = 'api/Page';
 
 
 // $route['dpapi/(:any)/(:any)'] = 'admin/$1/$2';  
