@@ -15,8 +15,6 @@ class Api extends REST_Controller
         parent::__construct();
         date_default_timezone_set('Asia/Manila');
         $this->load->model('api_model', 'modelrepo');
-        $this->load->helper('header_helper');
-
         $this->authorization_token = new Authorization_Token();
     }
 
@@ -32,7 +30,9 @@ class Api extends REST_Controller
 
             $AVR = false;
 
-            $resp = $head;
+            $err = $head;
+            
+            $this->response( $err, Rest_Controller::HTTP_BAD_REQUEST);
         } else {
 
             $this->form_validation->set_rules('page', 'page', 'trim|required');

@@ -23,12 +23,8 @@ class Api_model extends CI_Model
     function chk_access($data)
         {
             if ($data) {
-                $sql = "select * from api_keys ak left join api_users au on ak.id=au.key_id where ak.key like ? and au.api_name like ? and au.api_password like ?";
-                $Q = $this->db->query($sql, array(
-                    $data['key'],
-                    $data['username'],
-                    $data['userpassword']
-                ));
+                $sql = "select * from api_keys where `key` = ?";
+                $Q = $this->db->query($sql, array($data['key']));
                 return $Q->row_array();
             } else {
                 return false;

@@ -38,15 +38,14 @@ if (! function_exists('checkHeader')) {
 
         $resp = array(); // Initialize $resp array
 
-        if (array_key_exists('X-API-KEY', $header) != true || array_key_exists('X-API-USERNAME', $header) != true || array_key_exists('X-API-PASSWORD', $header) != true) {
-            // if (array_key_exists('X-API-KEY', $header) != true ) {
+        // if (array_key_exists('X-API-KEY', $header) != true || array_key_exists('X-API-USERNAME', $header) != true || array_key_exists('X-API-PASSWORD', $header) != true) {
+            if (array_key_exists('X-API-KEY', $header) != true ) {
             $resp['status'] = FALSE;
             $resp['message'] = 'Api parameters is invalid';
         } else {
             $access = array(
-                'key' => ltrim($header['X-API-KEY']),
-                'username' => ltrim($header['X-API-USERNAME']),
-                'userpassword' => md5(ltrim($header['X-API-PASSWORD']))
+                'key' => ltrim($header['X-API-KEY'])
+               
             );
 
             $apihders = $ci_instance->model_repo->chk_access($access);
@@ -56,6 +55,7 @@ if (! function_exists('checkHeader')) {
                 // If $apihders is true, set $resp to $apihders
                 if($apihders['status']!=1){
                     $resp['status'] = FALSE;
+                    $resp['status_code'] = 403;
                     $resp['message'] = "API access is currently inactive.";  
                 }else{
                     return $apihders;
@@ -63,6 +63,7 @@ if (! function_exists('checkHeader')) {
               
             } else {
                 $resp['status'] = FALSE;
+                $resp['status_code'] = 403;
                 $resp['message'] = "This API access is invalid";
             }
         }
