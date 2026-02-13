@@ -61,6 +61,7 @@ class Api extends REST_Controller
             } else {
                 $pdata['page'] = strip_tags(trim($datapost['page']));
                 $pageData = $this->modelrepo->get_page_details($pdata);
+                  $imageData = $this->modelrepo->get_page_image($pageData);
 
                 if ($pageData == false) {
                     $AVR = false;
@@ -71,6 +72,7 @@ class Api extends REST_Controller
                     $resp['status'] = true;
                     $resp['status_code'] = 200;
                     $resp['data'] = $pageData;
+                     $resp['img'] = $imageData;
                 }
             }
         }
