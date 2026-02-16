@@ -80,26 +80,83 @@ class Api extends REST_Controller
                     $FVE = $this->form_validation->error_array();
                     $this->response([
                         'status' => false,
+                        'status_code' => 401,
                         'message' => 'Error validation',
-                        'data' => $FVE
+                        'data'    => $FVE
                     ], Rest_Controller::HTTP_UNAUTHORIZED);
                 } else {
                     $pdata['page'] = strip_tags(trim($datapost['page']));
-                    $pageData = $this->modelrepo->get_page_details($pdata);
-                    $imageData = $this->modelrepo->get_page_image($pageData);
 
-                    if ($pageData == false) {
-                        $AVR = false;
-                        $resp['status'] = false;
-                        $resp['message'] = "no data";
-                    } else {
+                      $pageData = $this->modelrepo->chk_get_page($pdata); // validate 
+
+                    if($pageData==false){
+                        $this->response([
+                        'status'      => false,
+                        'status_code' => 400,
+                        'message'     => 'invalid page',
+                    ], Rest_Controller::HTTP_UNAUTHORIZED);
+
+                    }  
+                    $result = $this->modelrepo->get_page_details($pageData['id']); //page data
+
+                    // $imageData = $this->modelrepo->get_page_image($pageData);
+
+                    // if ($pageData == false) {
+                    //     $AVR = false;
+                    //     $resp['status'] = false;
+                    //     $resp['message'] = "no data";
+                    // } else {
                         
-                        $resp['status'] = true;
-                        $resp['status_code'] = 200;
-                        $resp['data'] = $pageData;
-                        $resp['img'] = $imageData;
+                        // $resp['status'] = true;
+                        // $resp['status_code'] = 200;
+                        // $resp['data'] = $result ;
+                        // $resp['img'] = $imageData;
+                    // }
+        
+                        if (!empty($result)) {
+
+                        // Create content ONCE
+                        $formatted = [
+                            'content' => [
+                                'title' => $result[0]['title'],
+                                'content_header' => $result[0]['content_header'],
+                                'content_body' => $result[0]['content_body'],
+                                'footer' => $result[0]['footer'],
+                            ],
+                            'image' => [],
+                            'title1' => []
+
+                        ];
+
+         
+
+
+                        $data = [];
+
+                        foreach ($result as $row) {
+                           $getImage=  $this->modelrepo->get_page_image($row['image_id']);
+
+                            $data[] = [
+                                'title' => $row['title'],
+                                'header' => $row['content_header'],
+                                'image' => $row['image_id'],
+                                'img'=> $getImage
+                            ];
+                            
+
+                             
+
+                           $response['data']= $data;
+
+                        }
+
+                        $resp =  $response;
+                        //  $resp['2'] =   $result;
                     }
-                }
+
+
+
+                                            }
             }
 
             if ($AVR) {

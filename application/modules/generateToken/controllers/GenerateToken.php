@@ -52,6 +52,7 @@ class GenerateToken extends REST_Controller
             $resp = array();
 
             $resp['status'] = true;
+            $resp['status_code'] =  201;
             $resp['message'] =  "Created";
             $resp['data']['token'] = $tokenData;
         }
