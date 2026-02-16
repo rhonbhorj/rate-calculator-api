@@ -50,7 +50,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
  * | my-controller/my-method -> my_controller/my_method   
  */
 
-$route['404_override'] = 'custom404';
+$route['404_override'] = 'api/error';
 
 $route['default_controller'] = 'api';
 

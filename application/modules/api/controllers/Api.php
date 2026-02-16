@@ -18,6 +18,16 @@ class Api extends REST_Controller
         $this->authorization_token = new Authorization_Token();
     }
 
+    public function error()
+    {
+                $this->response([
+                    'status' => false,
+                    'message' => '404 Page Not Found',
+                    
+                ], Rest_Controller::HTTP_NOT_FOUND);
+
+    }
+
     public function index_post()
     {   
         $AVR = true;
