@@ -57,6 +57,3 @@ $route['generate-token'] = 'generatetoken';
 
 
 $route['v1/page'] = 'api/Page';
-
-
-// $route['dpapi/(:any)/(:any)'] = 'admin/$1/$2';  

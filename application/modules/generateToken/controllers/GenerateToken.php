@@ -29,8 +29,6 @@ class GenerateToken extends REST_Controller
     }
 
 
-
-
     public function index_get()
     {
         $AVR = true;

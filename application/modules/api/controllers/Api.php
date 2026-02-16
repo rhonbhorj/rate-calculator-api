@@ -27,132 +27,101 @@ class Api extends REST_Controller
                 ], Rest_Controller::HTTP_NOT_FOUND);
 
     }
-
-    public function index_post()
-    {   
-        $AVR = true;
-
-        $today = date('Y-m-d H:i:s');
-
-        $head = checkHeader($this);
-
-        if ($head['status'] == false) {
-
-            $AVR = false;
-
-            $err = $head;
-            
-            $this->response( $err, Rest_Controller::HTTP_BAD_REQUEST);
-        } else {
-
-            $this->form_validation->set_rules('page', 'page', 'trim|required');
-
-            $contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '';
-
-            switch ($contentType) {
-                case 'application/json':
-                    $json = file_get_contents('php://input');
-                    $_POST = json_decode($json, true);
-                    $datapost = $_POST;
-                    break;
-                default:
-                    $datapost = array(
-                        'page' => $this->input->post('page', true)
-                    );
-            }
-
-            if ($this->form_validation->run() == FALSE) {
-                $FVE = $this->form_validation->error_array();
-                $this->response([
-                    'status' => false,
-                    'message' => 'Error validation',
-                    'data' => $FVE
-                ], Rest_Controller::HTTP_UNAUTHORIZED);
-            } else {
-                $pdata['page'] = strip_tags(trim($datapost['page']));
-                $pageData = $this->modelrepo->get_page_details($pdata);
-                  $imageData = $this->modelrepo->get_page_image($pageData);
-
-                if ($pageData == false) {
-                    $AVR = false;
-                    $resp['status'] = false;
-                    $resp['message'] = "no data";
-                } else {
-                    
-                    $resp['status'] = true;
-                    $resp['status_code'] = 200;
-                    $resp['data'] = $pageData;
-                     $resp['img'] = $imageData;
-                }
-            }
-        }
-
-        if ($AVR) {
-
-            $this->response($resp, Rest_Controller::HTTP_OK);
-        } else {
-
-            $this->response($resp, Rest_Controller::HTTP_UNAUTHORIZED);
-        }
-    }
-
+    
     public function index_get()
     {
         $data['status'] = false;
         $data['message'] = 'Forbidden';
+
         $this->response($data, Rest_Controller::HTTP_FORBIDDEN);
     }
 
 
-      public function test_get()
+
+    public function index_post()
     {   
-         $data['status'] = false;
-        $data['message'] = 'Forbidden';
-        $this->response($data, Rest_Controller::HTTP_OK);
+            $AVR = true;
 
+            $today = date('Y-m-d H:i:s');
+            $headers = $this->input->request_headers();
+            $head = checkHeader($this);
+            		$validateToken = $this->authorization_token->validateToken($headers);
+		    if ($validateToken['status'] == false) {
 
+			$AVR = false;
 
+			$resp = $validateToken;
+		    } elseif ($head['status'] == false) {
+
+                $AVR = false;
+
+                $err = $head;
+                
+                $this->response( $err, Rest_Controller::HTTP_BAD_REQUEST);
+            } else {
+
+                $this->form_validation->set_rules('page', 'page', 'trim|required');
+
+                $contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '';
+
+                switch ($contentType) {
+                    case 'application/json':
+                        $json = file_get_contents('php://input');
+                        $_POST = json_decode($json, true);
+                        $datapost = $_POST;
+                        break;
+                    default:
+                        $datapost = array(
+                            'page' => $this->input->post('page', true)
+                        );
+                }
+
+                if ($this->form_validation->run() == FALSE) {
+                    $FVE = $this->form_validation->error_array();
+                    $this->response([
+                        'status' => false,
+                        'message' => 'Error validation',
+                        'data' => $FVE
+                    ], Rest_Controller::HTTP_UNAUTHORIZED);
+                } else {
+                    $pdata['page'] = strip_tags(trim($datapost['page']));
+                    $pageData = $this->modelrepo->get_page_details($pdata);
+                    $imageData = $this->modelrepo->get_page_image($pageData);
+
+                    if ($pageData == false) {
+                        $AVR = false;
+                        $resp['status'] = false;
+                        $resp['message'] = "no data";
+                    } else {
+                        
+                        $resp['status'] = true;
+                        $resp['status_code'] = 200;
+                        $resp['data'] = $pageData;
+                        $resp['img'] = $imageData;
+                    }
+                }
+            }
+
+            if ($AVR) {
+
+                $this->response($resp, Rest_Controller::HTTP_OK);
+            } else {
+
+                $this->response($resp, Rest_Controller::HTTP_UNAUTHORIZED);
+            }
     }
+
+
+
 
  
 
 
 
 
-    public function generate_token_get()
-    {
-        $AVR = true;
 
-        $today = date('Y-m-d H:i:s');
 
-        $head = checkHeader($this);
 
-        if ($head['status'] == false) {
-
-            $AVR = false;
-
-            $resp = $head;
-        } else {
-
-            $token_data['Access'] = "true";
-            $token_data['account_id'] =  $head['id'];
-
-            $tokenData = $this->authorization_token->generateToken($token_data);
-
-            $resp = array();
-
-            $resp['status'] = true;
-            $resp['message'] =  "Created";
-            $resp['data']['token'] = $tokenData;
-        }
-        if ($AVR) {
-
-            $this->response($resp, Rest_Controller::HTTP_CREATED);
-        } else {
-
-            $this->response($resp, Rest_Controller::HTTP_UNAUTHORIZED);
-        }
-    }
 
 	
 }

@@ -80,10 +80,11 @@ class Auth extends REST_Controller
                     'message' => 'Error validation',
                     'data' => $FVE
                 ], Rest_Controller::HTTP_UNAUTHORIZED);
+
             } else {
-                $pdata['sess_id'] = strip_tags(trim($datapost['sess_id']));
-                $pdata['password'] = strip_tags(trim($datapost['password']));
-                    $pdata['username'] = strip_tags(trim($datapost['username']));
+                $pdata['sess_id']  = strip_tags(trim($datapost['sess_id']));
+                $pdata['password'] = trip_tags(trim($datapost['password']));
+                $pdata['username'] = strip_tags(trim($datapost['username']));
  
                 $validateSession = $this->modelrepo->validate_session($pdata);
 
@@ -95,19 +96,20 @@ class Auth extends REST_Controller
 
                      $validate = $this->modelrepo->validate_user($pdata);
                     if ($validate  == false) {
+
                         $AVR = false;
                         $resp['status'] = false;
                         $resp['message'] = "Wrong password";
+                        
                     } else {
-                    
-
+    
                             $resp['status'] = true;
                             $resp['message'] = "success";
                         }
                     }
                 }
-            }
-        var_dump( $head);
+        }
+ 
 
         if ($AVR) {
 
@@ -204,8 +206,8 @@ class Auth extends REST_Controller
 
             $this->form_validation->set_rules('username', 'username', 'trim|required');
             $this->form_validation->set_rules('password', 'password', 'trim|required');
-			   $this->form_validation->set_rules('ip', 'ip', 'trim|required');
-			      $this->form_validation->set_rules('user_agent', 'user_agent', 'trim|required');
+			$this->form_validation->set_rules('ip', 'ip', 'trim|required');
+			$this->form_validation->set_rules('user_agent', 'user_agent', 'trim|required');
 
             $contentType = isset($_SERVER['CONTENT_TYPE']) ? $_SERVER['CONTENT_TYPE'] : '';
 
@@ -314,7 +316,6 @@ class Auth extends REST_Controller
 
         $unique_id = $datetime . $random_number;
 
-        // $unique_id = substr($unique_id, 0, 10);
 
         return $unique_id;
     }
