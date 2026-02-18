@@ -108,11 +108,15 @@ class Api extends REST_Controller
                            $getImage=  $this->modelrepo->get_page_image($row['image_id']);
 
                             $data[] = [
+                                
+                                'background_image' => $row['background_image'],
                                 'title' => $row['title'],
                                 'header' => $row['content_header'],
                                 'body' => $row['content_body'],
                                 'footer' => $row['footer'],
                                 'image' => $row['image_id'],
+
+                                'others' => json_decode($row['others'],true),
                                 'img'=> $getImage
                             ];
 
