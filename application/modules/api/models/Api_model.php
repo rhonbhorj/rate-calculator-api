@@ -42,7 +42,7 @@ class Api_model extends CI_Model
 
     public function get_page_details( $data)
     {
-        $query = $this->db->select('title,content_header,content_body,footer,image_id')
+        $query = $this->db->select('*')
                 ->from('tbl_content')
                 ->where('status', 'active')
                 ->where('page_id',  $data)

@@ -56,4 +56,5 @@ $route['default_controller'] = 'api';
 $route['generate-token'] = 'generatetoken';
 
 
+
 $route['v1/page'] = 'api/Page';

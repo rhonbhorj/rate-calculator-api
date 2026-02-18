@@ -99,38 +99,9 @@ class Api extends REST_Controller
                     }  
                     $result = $this->modelrepo->get_page_details($pageData['id']); //page data
 
-                    // $imageData = $this->modelrepo->get_page_image($pageData);
-
-                    // if ($pageData == false) {
-                    //     $AVR = false;
-                    //     $resp['status'] = false;
-                    //     $resp['message'] = "no data";
-                    // } else {
-                        
-                        // $resp['status'] = true;
-                        // $resp['status_code'] = 200;
-                        // $resp['data'] = $result ;
-                        // $resp['img'] = $imageData;
-                    // }
         
                         if (!empty($result)) {
-
-                        // Create content ONCE
-                        $formatted = [
-                            'content' => [
-                                'title' => $result[0]['title'],
-                                'content_header' => $result[0]['content_header'],
-                                'content_body' => $result[0]['content_body'],
-                                'footer' => $result[0]['footer'],
-                            ],
-                            'image' => [],
-                            'title1' => []
-
-                        ];
-
-         
-
-
+                            
                         $data = [];
 
                         foreach ($result as $row) {
@@ -139,19 +110,21 @@ class Api extends REST_Controller
                             $data[] = [
                                 'title' => $row['title'],
                                 'header' => $row['content_header'],
+                                'body' => $row['content_body'],
+                                'footer' => $row['footer'],
                                 'image' => $row['image_id'],
                                 'img'=> $getImage
                             ];
-                            
-
-                             
-
-                           $response['data']= $data;
 
                         }
+                        $resp['status'] = true;
 
-                        $resp =  $response;
-                        //  $resp['2'] =   $result;
+                        $resp['status_code'] = 200;
+
+                        $resp['message'] = "Success";
+                        
+                        $resp['data'] = $data;
+                        
                     }
 
 
