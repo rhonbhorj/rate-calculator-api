@@ -115,6 +115,7 @@ class Api extends REST_Controller
                                 'body' => $row['content_body'],
                                 'footer' => $row['footer'],
                                 'image' => $row['image_id'],
+                                'url' => $row['url'],
 
                                 'others' => json_decode($row['others'],true),
                                 'img'=> $getImage
