@@ -41,7 +41,8 @@ if (! function_exists('checkHeader')) {
         // if (array_key_exists('X-API-KEY', $header) != true || array_key_exists('X-API-USERNAME', $header) != true || array_key_exists('X-API-PASSWORD', $header) != true) {
             if (array_key_exists('X-API-KEY', $header) != true ) {
             $resp['status'] = FALSE;
-            $resp['message'] = 'Api parameters is invalid';
+             $resp['status_code'] = 401;
+            $resp['message'] = 'Unauthorized - X-API-KEY required';
         } else {
             $access = array(
                 'key' => ltrim($header['X-API-KEY'])

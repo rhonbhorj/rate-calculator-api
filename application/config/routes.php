@@ -53,7 +53,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 $route['404_override'] = 'api/error';
 
 $route['default_controller'] = 'api';
-$route['generate-token'] = 'generatetoken';
+$route['generate-token'] = 'generateToken';
 
 
 
