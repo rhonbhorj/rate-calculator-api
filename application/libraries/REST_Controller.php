@@ -14,6 +14,11 @@ use stdClass;
 // use stdClass;
 defined('BASEPATH') OR exit('No direct script access allowed');
 
+// // Ensure the Format class is available when using the namespaced REST controller
+// if (file_exists(APPPATH . 'libraries/Format.php')) {
+//     require_once APPPATH . 'libraries/Format.php';
+// }
+
 /**
  * CodeIgniter Rest Controller
  * A fully RESTful server implementation for CodeIgniter using one library, one config file and one controller.

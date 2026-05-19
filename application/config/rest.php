@@ -227,7 +227,7 @@ $config['rest_valid_logins'] = ['BICT_LOCAL' => '131CT5CeS5'];
 |    restrict certain methods to IPs in your white-list
 |
 */
-$config['rest_ip_whitelist_enabled'] = TRUE;
+$config['rest_ip_whitelist_enabled'] = FALSE;
 
 /*
 |--------------------------------------------------------------------------
