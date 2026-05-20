@@ -88,6 +88,7 @@ class Calculator_model extends CI_Model
         return [
             'location_code' => $location_code,
             'cluster_name' => $cluster_name,
+            'cluster_id' => $cluster_id,
             'region_id' => $regionData['region_id'],
             'region_name' => $regionData['region_name']
         ];
@@ -161,4 +162,49 @@ class Calculator_model extends CI_Model
         return $query->num_rows() > 0 ? $query->result_array() : false;
     }
 
+
+    public function fetchFclCharges($fcl_type)
+    {
+        $this->db->where('category_id', $fcl_type);
+
+        $query = $this->db->get('tbl_charges');
+
+        if (!$query) {
+            return $this->db->error();
+        }
+
+        return $query->num_rows() > 0 ? $query->result_array() : false;
+    }
+
+    public function chkFclDestination($fcl_type, $destination)
+    {
+        $this->db->where('category_id', $fcl_type);
+        $this->db->where('destination', $destination);
+
+        $query = $this->db->get('tbl_fcl_rates');
+
+        if (!$query) {
+            return $this->db->error();
+        }
+
+        return $query->num_rows() > 0 ? true : false;
+
+    }
+
+    public function fetchFclRates($fcl_type, $serviceType, $destination)
+    {
+        $this->db->select($serviceType);
+
+        $this->db->where('category_id', $fcl_type);
+        $this->db->where('destination', $destination);
+
+
+        $query = $this->db->get('tbl_fcl_rates');
+
+        if (!$query) {
+            return $this->db->error();
+        }
+
+        return $query->num_rows() > 0 ? $query->row_array()[$serviceType] : false;
+    }
 }

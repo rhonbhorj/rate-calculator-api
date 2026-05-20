@@ -209,7 +209,7 @@ class Calculator extends REST_Controller
             "status" => "success",
             "isOTD" => $isOTD,
             "isIntraCity" => $isIntraCity,
-            "shippingFeeBreakdown" => $breakdown['charges'],
+            "shipping_fee_breakdown" => $breakdown['charges'],
             "total_freight_charge" => $breakdown['total_fee'],
         ];
     }
@@ -340,21 +340,118 @@ class Calculator extends REST_Controller
         }
 
         $origin = $this->traceRegion($data['origin']);
+        $destination = $this->traceRegion($data['destination']);
 
-        // ✅ Check region instead (since cluster_name is no longer returned)
+
         if ($origin['cluster_name'] !== "MNL") {
             return [
                 "status" => "error",
                 "message" => "Full Container Load (FCL) shipments must originate from Metro Manila.",
             ];
-        }else {
-                return [
+        }
+
+        $validPort = $this->modelrepo->chkFclDestination($fclType, $destination['location_code']);
+
+        if (!$validPort) {
+            return [
                 "status" => "error",
-                "message" => "ok",
-                $origin
+                "message" => "No valid delivery port available for the selected area."
             ];
         }
 
+        $isOsa = $destination['fwd'] === 'OSA';
+
+        if(
+            $isOsa &&
+            ($data['serviceType'] === 'd2d' || $data['serviceType'] === 'p2d')
+        ) {
+            return [
+                "status" => "error",
+                "message" => "Delivery is unavailable for the selected area. Port-to-door and door-to-door services are not supported."
+            ];
+        }
+
+        $fclRate = $this->modelrepo->fetchFclRates($fclType, $data['serviceType'], $destination['location_code']);
+        $fclCharges = $this->modelrepo->fetchFclCharges($fclType);
+
+        $isVisayas = $destination['region'] === "Visayas" ? true : false;
+        $declaredValue = $data['declared_value'];
+
+        $fclCalculations = $this->calculateFclCharges($fclCharges, $fclRate, $isVisayas, $declaredValue);
+
+
+        return [
+            "status" => "success",
+            "shipping_fee_breakdown" => $fclCalculations['shipping_fee_breakdown'],
+            "total_freight_charge" => $fclCalculations['total_freight_change'],
+            $isOsa
+        ];
+
+
+    }
+
+    private function calculateFclCharges($fclCharges, $fclRate, $isVisayas, $declaredValue)
+    {
+        $allowableAmount = 0;
+        $valuationFee = 0;
+        $fuelSurcharge = 0;
+        $documentStamp = 0;
+
+        foreach ($fclCharges as $charge) {
+            if ($charge['charge_name'] === 'Valuation Fee - Allowable Amount') {
+                $allowableAmount = (float) $charge['charge_rate'];
+                break;
+            }
+        }
+
+        foreach ($fclCharges as $charge) {
+            $name = $charge['charge_name'];
+            $rate = (float) $charge['charge_rate'];
+
+            if (
+                $name == 'Valuation Fee - Charge per 1,000 excess'
+                && $declaredValue > $allowableAmount
+            ) {
+                $excess = $declaredValue - $allowableAmount;
+                $chargableExcess = $excess / 1000;
+                $valuationFee = round($chargableExcess * $rate, 2);
+            }
+
+            if ($name == 'Fuel Surcharge - Visayas' && $isVisayas) {
+                $fuelSurcharge = round($rate, 2);
+            }
+
+            if ($name == 'Fuel Surcharge - Mindanao' && !$isVisayas) {
+                $fuelSurcharge = round($rate, 2);
+            }
+
+            if ($name == 'Document Stamp') {
+                $documentStamp = round($rate, 2);
+            }
+        }
+
+        $vat = 0;
+        foreach ($fclCharges as $charge) {
+            if ($charge['charge_name'] === 'VAT Rate') {
+                $vatRate = (float) $charge['charge_rate'];
+                $vat = round(($fclRate + $valuationFee + $fuelSurcharge) * ($vatRate / 100), 2);
+                break;
+            }
+        }
+
+        $subtotal = round($fclRate + $valuationFee + $fuelSurcharge + $vat, 2);
+        $shippingFee = round($subtotal + $documentStamp, 2);
+
+        return [
+            "shipping_fee_breakdown" => [
+                'valuation_fee' => $valuationFee,
+                'fuel_surcharge' => $fuelSurcharge,
+                'vat' => $vat,
+                'subtotal' => $subtotal,
+                'document_stamp' => $documentStamp
+            ],
+            "total_freight_change" => $shippingFee
+        ];
     }
 
 
@@ -378,6 +475,8 @@ class Calculator extends REST_Controller
         $region = ($res && isset($res['region_name'])) ? $res['region_name'] : null;
         $regionId = ($res && isset($res['region_id'])) ? $res['region_id'] : null;
         $cluster = ($res && isset($res['cluster_name'])) ? $res['cluster_name'] : null;
+        $location_code = ($res && isset($res['location_code'])) ? $res['location_code'] : null;
+
 
 
         return [
@@ -385,6 +484,7 @@ class Calculator extends REST_Controller
             'region' => $region,
             'region_id' => $regionId,
             'cluster_name' => $cluster,
+            'location_code' => $location_code,
             'city' => $city
         ];
     }
@@ -479,9 +579,9 @@ class Calculator extends REST_Controller
             "delivery_type" => $data['delivery_type'],
             "forCrating" => isset($data['forCrating']) ? (bool) $data['forCrating'] : false,
             "perishable" => isset($data['perishable']) ? (bool) $data['perishable'] : false,
-            "serviceType" => isset($data['service_type']) ? trim($data['service_type']) : null,
+            "serviceType" => isset($data['serviceType']) ? trim($data['serviceType']) : null,
             "breakbulk" => isset($data['breakbulk']) ? (bool) $data['breakbulk'] : false,
-            "storageDays" => isset($data['storage_days']) ? (int) $data['storage_days'] : 0,
+            "storageDays" => isset($data['storageDays']) ? (int) $data['storageDays'] : 0,
             "fcl_type" => isset($data['fcl_type']) ? trim($data['fcl_type']) : null,
         ];
     }
