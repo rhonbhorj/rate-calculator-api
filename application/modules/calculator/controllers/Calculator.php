@@ -305,7 +305,8 @@ class Calculator extends REST_Controller
             ];
         }
 
-        $origin = $this->traceRegion($data['origin']);
+        $origin      = $this->traceRegion($data['origin']);
+        $destination = $this->traceRegion($data['destination']);
 
         if ($origin['cluster_name'] !== 'MNL') {
             return [
@@ -313,6 +314,99 @@ class Calculator extends REST_Controller
                 'message' => 'Full Container Load (FCL) shipments must originate from Metro Manila.',
             ];
         }
+
+        $validPort = $this->modelrepo->chkFclDestination($fclType, $destination['location_code']);
+
+        if (!$validPort) {
+            return [
+                'status'  => 'error',
+                'message' => 'No valid delivery port available for the selected area.'
+            ];
+        }
+
+        $isOsa = $destination['fwd'] === 'OSA';
+
+        if ($isOsa && ($data['serviceType'] === 'P2D' || $data['serviceType'] === 'D2D')) {
+            return [
+                'status'  => 'error',
+                'message' => 'Delivery is unavailable for the selected area. Port-to-door and door-to-door services are not supported.'
+            ];
+        }
+
+        $fclRate    = $this->modelrepo->fetchFclRates($fclType, $data['serviceType'], $destination['location_code']);
+        $fclCharges = $this->modelrepo->fetchFclCharges($fclType);
+
+        $isVisayas     = $destination['region'] === 'Visayas';
+        $declaredValue = $data['declared_value'];
+
+        $fclCalculations = $this->calculateFclCharges($fclCharges, $fclRate, $isVisayas, $declaredValue);
+
+        return [
+            'status'               => 'success',
+            'shippingFeeBreakdown' => $fclCalculations['shipping_fee_breakdown'],
+            'total_freight_charge' => $fclCalculations['total_freight_change']
+        ];
+    }
+
+    private function calculateFclCharges($fclCharges, $fclRate, $isVisayas, $declaredValue)
+    {
+        $allowableAmount = 0;
+        $valuationFee    = 0;
+        $fuelSurcharge   = 0;
+        $documentStamp   = 0;
+
+        foreach ($fclCharges as $charge) {
+            if ($charge['charge_name'] === 'Valuation Fee - Allowable Amount') {
+                $allowableAmount = (float) $charge['charge_rate'];
+                break;
+            }
+        }
+
+        foreach ($fclCharges as $charge) {
+            $name = $charge['charge_name'];
+            $rate = (float) $charge['charge_rate'];
+
+            if ($name === 'Valuation Fee - Charge per 1,000 excess' && $declaredValue > $allowableAmount) {
+                $excess          = $declaredValue - $allowableAmount;
+                $chargableExcess = $excess / 1000;
+                $valuationFee    = round($chargableExcess * $rate, 2);
+            }
+
+            if ($name === 'Fuel Surcharge - Visayas' && $isVisayas) {
+                $fuelSurcharge = round($rate, 2);
+            }
+
+            if ($name === 'Fuel Surcharge - Mindanao' && !$isVisayas) {
+                $fuelSurcharge = round($rate, 2);
+            }
+
+            if ($name === 'Document Stamp') {
+                $documentStamp = round($rate, 2);
+            }
+        }
+
+        $vat = 0;
+        foreach ($fclCharges as $charge) {
+            if ($charge['charge_name'] === 'VAT Rate') {
+                $vatRate = (float) $charge['charge_rate'];
+                $vat     = round(($fclRate + $valuationFee + $fuelSurcharge) * ($vatRate / 100), 2);
+                break;
+            }
+        }
+
+        $subtotal    = round($fclRate + $valuationFee + $fuelSurcharge + $vat, 2);
+        $shippingFee = round($subtotal + $documentStamp, 2);
+
+        return [
+            'shipping_fee_breakdown' => [
+                'valuation_fee'  => $valuationFee,
+                'fuel_surcharge' => $fuelSurcharge,
+                'vat'            => $vat,
+                'subtotal'       => $subtotal,
+                'document_stamp' => $documentStamp
+            ],
+            'total_freight_change' => $shippingFee
+        ];
     }
 
     // ─────────────────────────────────────────────
@@ -412,7 +506,7 @@ class Calculator extends REST_Controller
             ];
         }
 
-        // CBM — rounded to 2dp to match the displayed value used in Excel pricing
+        // CBM — rounded to 2dp to match Excel pricing standard
         $cbm = round($this->calculate_cbm($data['items']), 2);
 
         // Service type flags
@@ -705,16 +799,18 @@ class Calculator extends REST_Controller
         $fwd = $this->modelrepo->chkAddress($barangay, $city, $province);
         $res = $this->modelrepo->getRegionFromAddress($city, $province);
 
-        $region      = ($res && isset($res['region_name'])) ? $res['region_name'] : null;
-        $regionId    = ($res && isset($res['region_id'])) ? $res['region_id'] : null;
-        $clusterName = ($res && isset($res['cluster_name'])) ? $res['cluster_name'] : null;
+        $region       = ($res && isset($res['region_name']))   ? $res['region_name']   : null;
+        $regionId     = ($res && isset($res['region_id']))     ? $res['region_id']     : null;
+        $clusterName  = ($res && isset($res['cluster_name']))  ? $res['cluster_name']  : null;
+        $locationCode = ($res && isset($res['location_code'])) ? $res['location_code'] : null;
 
         return [
-            'fwd'          => $fwd,
-            'region'       => $region,
-            'region_id'    => $regionId,
-            'cluster_name' => $clusterName,
-            'city'         => $city
+            'fwd'           => $fwd,
+            'region'        => $region,
+            'region_id'     => $regionId,
+            'cluster_name'  => $clusterName,
+            'location_code' => $locationCode,
+            'city'          => $city
         ];
     }
 
