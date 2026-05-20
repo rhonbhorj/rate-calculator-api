@@ -12,14 +12,14 @@ class Calculator_model extends CI_Model
         parent::__construct();
     }
 
-    public function getRegionFromAddress( $city, $province)
+    public function getRegionFromAddress($city, $province)
     {
         // Step 1: Get location_code
+
         $this->db->select('location_code');
-        $this->db->where([
-            'province' => $province,
-            'city' => $city,
-        ]);
+        $this->db->where('province', $province);
+        $this->db->like('city', $city);
+
 
         $query = $this->db->get('tbl_servicable_areas');
 
@@ -33,7 +33,7 @@ class Calculator_model extends CI_Model
 
         $location_code = $query->row_array()['location_code'];
 
-        // Step 2: Get cluster_id
+        // Step 2: Get cluster_id + cluster_name
         $this->db->select('cluster_id');
         $this->db->where('location_code', $location_code);
 
@@ -47,10 +47,11 @@ class Calculator_model extends CI_Model
             return false;
         }
 
-        $cluster_id = $query->row_array()['cluster_id'];
+        $locationData = $query->row_array();
+        $cluster_id = $locationData['cluster_id'];
 
         // Step 3: Get region_id
-        $this->db->select('region_id');
+        $this->db->select('region_id, cluster_name');
         $this->db->where('cluster_id', $cluster_id);
 
         $query = $this->db->get('tbl_clusters');
@@ -64,6 +65,8 @@ class Calculator_model extends CI_Model
         }
 
         $region_id = $query->row_array()['region_id'];
+        $cluster_name = $query->row_array()['cluster_name'];
+
 
         // Step 4: Get region_name
         $this->db->select('region_name, region_id');
@@ -75,14 +78,26 @@ class Calculator_model extends CI_Model
             return $this->db->error();
         }
 
-        return $query->num_rows() > 0 ? $query->row_array() : false;
+        if ($query->num_rows() == 0) {
+            return false;
+        }
+
+        $regionData = $query->row_array();
+
+        // ✅ Final return including cluster_name + location_code
+        return [
+            'location_code' => $location_code,
+            'cluster_name' => $cluster_name,
+            'region_id' => $regionData['region_id'],
+            'region_name' => $regionData['region_name']
+        ];
     }
 
 
     public function chkAddress($barangay, $city, $province)
     {
         $this->db->where('province', $province);
-        $this->db->where('city', $city);
+        $this->db->like('city', $city);
         $this->db->where('barangay', $barangay);
 
 
@@ -133,10 +148,11 @@ class Calculator_model extends CI_Model
     }
 
 
-    public function fetchGenCarOtherRates () {
+    public function fetchGenCarOtherRates()
+    {
         $this->db->where('category_id', 1);
 
-         $query = $this->db->get('tbl_charges');
+        $query = $this->db->get('tbl_charges');
 
         if (!$query) {
             return $this->db->error();

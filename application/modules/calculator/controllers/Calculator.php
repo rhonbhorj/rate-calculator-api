@@ -5,6 +5,7 @@ defined('BASEPATH') or exit('No direct script access allowed');
 require APPPATH . 'libraries/Format.php';
 require APPPATH . 'libraries/REST_Controller.php';
 
+use Matrix\Decomposition\LU;
 use Restserver\Libraries\REST_Controller;
 
 class Calculator extends REST_Controller
@@ -69,7 +70,9 @@ class Calculator extends REST_Controller
                 case 'gen_cargo':
                     $res = $this->calculateGenCargo($data);
                     break;
-
+                case 'fcl':
+                    $res = $this->calculateFCL($data);
+                    break;
                 default:
                     return $this->response([
                         "status" => "error",
@@ -78,10 +81,10 @@ class Calculator extends REST_Controller
             }
 
             // Validate result
-            if (!$res || !is_array($res)) {
+            if (isset($res['status']) && $res['status'] == 'error') {
                 return $this->response([
                     "status" => "error",
-                    "message" => "Failed to calculate shipping"
+                    "message" => $res['message']
                 ], REST_Controller::HTTP_BAD_REQUEST);
             }
 
@@ -89,6 +92,8 @@ class Calculator extends REST_Controller
             if (!isset($res['status'])) {
                 $res['status'] = "success";
             }
+
+            $res['delivery_type'] = $data['delivery_type'];
 
             return $this->response($res, REST_Controller::HTTP_OK);
 
@@ -103,6 +108,8 @@ class Calculator extends REST_Controller
     }
 
 
+
+    // GENERAL/AIR CARGO FUNCTIONS
     private function calculateGenCargo($data)
     {
         $origin = $this->traceRegion($data['origin']);
@@ -117,12 +124,13 @@ class Calculator extends REST_Controller
 
 
         if (
-            !isset($origin['city'], $origin['region']['region_id']) ||
-            !isset($destination['city'], $destination['region']['region_name'], $destination['fwd'])
+            !isset($origin['city'], $origin['region_id']) ||
+            !isset($destination['city'], $destination['region'], $destination['fwd'])
         ) {
             return [
                 "status" => "error",
-                "message" => "Invalid region data"
+                "message" => "Invalid region data",
+                $destination
             ];
         }
 
@@ -136,7 +144,7 @@ class Calculator extends REST_Controller
         }
 
 
-        $weight = (float) $data['weight'];
+        $weight = $data['weight'];
 
         $isOTD = ($destination['fwd'] === 'OTD');
         $isIntraCity = ($origin['city'] === $destination['city']);
@@ -151,8 +159,8 @@ class Calculator extends REST_Controller
 
             if ($isExcess) {
                 $weightRate = $this->modelrepo->getGenCarRates(
-                    $origin['region']['region_id'],
-                    $destination['region']['region_name'],
+                    $origin['region_id'],
+                    $destination['region'],
                     $isExcess,
                     $isOTD
                 );
@@ -172,8 +180,8 @@ class Calculator extends REST_Controller
 
             } else {
                 $weightRate = $this->modelrepo->getGenCarRates(
-                    $origin['region']['region_id'],
-                    $destination['region']['region_name'],
+                    $origin['region_id'],
+                    $destination['region'],
                     $isExcess,
                     $isOTD
                 );
@@ -192,20 +200,20 @@ class Calculator extends REST_Controller
 
         $otherCharges = $this->modelrepo->fetchGenCarOtherRates();
 
-        $otherChargeValue = $this->calculateOtherCharges($otherCharges, $data, $weightCharge);
+        $otherChargeValue = $this->calculateGenCargoOtherCharges($otherCharges, $data, $weightCharge);
 
-        $breakdown = $this->calculateTotalFee($weightCharge, $otherChargeValue);
+        $breakdown = $this->calculateGenCargoTotalFee($weightCharge, $otherChargeValue);
 
 
         return [
             "status" => "success",
-            "origin" => $origin,
-            "destination" => $destination,
-            "shippingFeeBreakdown" => $breakdown
+            "isOTD" => $isOTD,
+            "isIntraCity" => $isIntraCity,
+            "shippingFeeBreakdown" => $breakdown['charges'],
+            "total_freight_charge" => $breakdown['total_fee'],
         ];
     }
-
-    private function calculateTotalFee($weightCharge, $charges)
+    private function calculateGenCargoTotalFee($weightCharge, $charges)
     {
         $valuation = round($charges['valuation_charge'] ?? 0, 2);
         $awb = round($charges['awb_fee'] ?? 0, 2);
@@ -224,27 +232,30 @@ class Calculator extends REST_Controller
             $awb +
             $crating +
             $perishable +
-            $tfi,
+            $tfi +
+            $vat,
             2
         );
 
         // Total
-        $total = round($subTotal + $vat + $docStamp, 2);
+        $total = round($subTotal + $docStamp, 2);
 
         return [
-            "weight_charge" => $weightCharge,
-            "valuation_charge" => $valuation,
-            "awb_fee" => $awb,
-            "crating_fee" => $crating,
-            "perishable_rate" => $perishable,
-            "tfi_rate" => $tfi,
-            "subtotal" => $subTotal,
-            "vat" => $vat,
-            "document_stamp" => $docStamp,
+            "charges" => [
+                "weight_charge" => $weightCharge,
+                "valuation_charge" => $valuation,
+                "awb_fee" => $awb,
+                "crating_fee" => $crating,
+                "perishable_fee" => $perishable,
+                "tfi" => $tfi,
+                "vat" => $vat,
+                "subtotal" => $subTotal,
+                "document_stamp" => $docStamp,
+            ],
             "total_fee" => $total
         ];
     }
-    private function calculateOtherCharges($otherCharges, $data, $weightCharge)
+    private function calculateGenCargoOtherCharges($otherCharges, $data, $weightCharge)
     {
         $resData = [
             'valuation_charge' => 0,
@@ -266,7 +277,7 @@ class Calculator extends REST_Controller
             if ($name === 'Valuation Rate') {
                 $resData['valuation_charge'] = $data['declared_value'] * ($rate / 100);
             }
-            // ✅ AWB Fee (fixed)
+
             if ($name === 'AWB Fee') {
                 $resData['awb_fee'] = $rate;
             }
@@ -313,6 +324,42 @@ class Calculator extends REST_Controller
 
         return $resData;
     }
+
+
+
+    private function calculateFCL($data)
+    {
+        $fclType = $data['fcl_type'] === "20ftr" ? 3
+            : ($data['fcl_type'] === "40ftr" ? 4 : null);
+
+        if ($fclType === null) {
+            return [
+                "status" => "error",
+                "message" => "Invalid FCL Type"
+            ];
+        }
+
+        $origin = $this->traceRegion($data['origin']);
+
+        // ✅ Check region instead (since cluster_name is no longer returned)
+        if ($origin['cluster_name'] !== "MNL") {
+            return [
+                "status" => "error",
+                "message" => "Full Container Load (FCL) shipments must originate from Metro Manila.",
+            ];
+        }else {
+                return [
+                "status" => "error",
+                "message" => "ok",
+                $origin
+            ];
+        }
+
+    }
+
+
+    // REUSABLE FUNCTIONS
+
     private function traceRegion($address)
     {
 
@@ -328,21 +375,19 @@ class Calculator extends REST_Controller
         $res = $this->modelrepo->getRegionFromAddress($city, $province);
 
 
-        if ($res && is_array($res) && isset($res['region_name'])) {
-            $region = $res;
-        } else {
-            $region = null;
-        }
+        $region = ($res && isset($res['region_name'])) ? $res['region_name'] : null;
+        $regionId = ($res && isset($res['region_id'])) ? $res['region_id'] : null;
+        $cluster = ($res && isset($res['cluster_name'])) ? $res['cluster_name'] : null;
 
 
         return [
             'fwd' => $fwd,
             'region' => $region,
+            'region_id' => $regionId,
+            'cluster_name' => $cluster,
             'city' => $city
         ];
-
     }
-
     private function validateShippingData($data)
     {
         $errors = [];
@@ -350,12 +395,9 @@ class Calculator extends REST_Controller
         $required = [
             'origin',
             'destination',
-            'weight',
-            'length',
-            'width',
-            'height',
-            'declared_value',
-            'delivery_type'
+            'items',
+            'delivery_type', //remove once category determination is created
+            'declared_value'
         ];
 
         foreach ($required as $field) {
@@ -364,53 +406,85 @@ class Calculator extends REST_Controller
             }
         }
 
-        // Numeric checks
-        $numericFields = ['weight', 'length', 'width', 'height', 'declared_value'];
+        if (isset($data['items'])) {
+            if (!is_array($data['items']) || empty($data['items'])) {
+                $errors['items'] = "items must be a non-empty array";
+            } else {
+                foreach ($data['items'] as $index => $item) {
+                    $itemPath = "items.$index";
+                    $itemRequired = ['weight', 'length', 'width', 'height', 'quantity'];
 
-        foreach ($numericFields as $field) {
-            if (isset($data[$field]) && !is_numeric($data[$field])) {
-                $errors[$field] = "$field must be numeric";
+                    if (!is_array($item)) {
+                        $errors[$itemPath] = "each item must be an object";
+                        continue;
+                    }
+
+                    foreach ($itemRequired as $field) {
+                        if (!isset($item[$field]) || $item[$field] === '') {
+                            $errors["{$itemPath}.{$field}"] = "$field is required";
+                        }
+                    }
+
+                    $numericFields = ['weight', 'length', 'width', 'height'];
+                    foreach ($numericFields as $field) {
+                        if (isset($item[$field]) && !is_numeric($item[$field])) {
+                            $errors["{$itemPath}.{$field}"] = "$field must be numeric";
+                        }
+                    }
+
+                    if (isset($item['quantity']) && (!is_numeric($item['quantity']) || (int) $item['quantity'] <= 0)) {
+                        $errors["{$itemPath}.quantity"] = "quantity must be a positive integer";
+                    }
+                }
             }
         }
 
         // delivery_type validation
-        if (isset($data['delivery_type']) && $data['delivery_type'] !== 'gen_cargo') {
-            $errors['delivery_type'] = "Invalid delivery_type";
+        if (isset($data['delivery_type']) && !in_array($data['delivery_type'], ['gen_cargo', 'fcl', 'lcl'], true)) {
+            $errors['delivery_type'] = "Invalid delivery type. Allowed values: gen_cargo, fcl, lcl.";
         }
 
-        // Optional checks
+
         if (isset($data['storageDays']) && !is_numeric($data['storageDays'])) {
             $errors['storageDays'] = "storageDays must be integer";
         }
 
         return $errors;
     }
-
     private function normalizeShippingData($data)
     {
+        $items = array_map(function ($item) {
+            return [
+                'weight' => (float) $item['weight'],
+                'length' => (float) $item['length'],
+                'width' => (float) $item['width'],
+                'height' => (float) $item['height'],
+                'quantity' => isset($item['quantity']) ? (int) $item['quantity'] : 1,
+            ];
+        }, $data['items']);
+
+        $totalWeight = 0;
+        $totalDeclaredValue = 0;
+
+        foreach ($items as $item) {
+            $totalWeight += $item['weight'] * $item['quantity'];
+        }
+
         return [
             "origin" => trim($data['origin']),
             "destination" => trim($data['destination']),
-
-            "weight" => (float) $data['weight'],
-            "length" => (float) $data['length'],
-            "width" => (float) $data['width'],
-            "height" => (float) $data['height'],
-            "declared_value" => (float) $data['declared_value'],
-
+            "items" => $items,
+            "weight" => $totalWeight,
+            "declared_value" => trim($data['declared_value']),
             "delivery_type" => $data['delivery_type'],
-
             "forCrating" => isset($data['forCrating']) ? (bool) $data['forCrating'] : false,
             "perishable" => isset($data['perishable']) ? (bool) $data['perishable'] : false,
-            "serviceType" => isset($data['serviceType']) ? trim($data['serviceType']) : null,
+            "serviceType" => isset($data['service_type']) ? trim($data['service_type']) : null,
             "breakbulk" => isset($data['breakbulk']) ? (bool) $data['breakbulk'] : false,
-            "storageDays" => isset($data['storageDays']) ? (int) $data['storageDays'] : 0
+            "storageDays" => isset($data['storage_days']) ? (int) $data['storage_days'] : 0,
+            "fcl_type" => isset($data['fcl_type']) ? trim($data['fcl_type']) : null,
         ];
     }
-
-
-
-
 
 
 }
