@@ -52,12 +52,18 @@ class Calculator extends REST_Controller
                 ], REST_Controller::HTTP_BAD_REQUEST);
             }
 
+            // Auto-determine delivery_type from items
+            if (isset($data['items']) && is_array($data['items']) && !empty($data['items'])) {
+                $data['delivery_type'] = $this->determine_delivery_type($data['items']);
+            }
+
             $errors = $this->validateShippingData($data);
 
             if (!empty($errors)) {
                 return $this->response([
-                    'status' => 'error',
-                    'errors' => $errors
+                    'status'        => 'error',
+                    'delivery_type' => $data['delivery_type'],
+                    'message'       => 'Please complete required parameters'
                 ], REST_Controller::HTTP_BAD_REQUEST);
             }
 
@@ -82,8 +88,9 @@ class Calculator extends REST_Controller
 
             if (isset($res['status']) && $res['status'] === 'error') {
                 return $this->response([
-                    'status'  => 'error',
-                    'message' => $res['message']
+                    'status'        => 'error',
+                    'delivery_type' => $data['delivery_type'],
+                    'message'       => $res['message']
                 ], REST_Controller::HTTP_BAD_REQUEST);
             }
 
@@ -102,6 +109,110 @@ class Calculator extends REST_Controller
                 'details' => $e->getMessage()
             ], REST_Controller::HTTP_INTERNAL_SERVER_ERROR);
         }
+    }
+    // public function calculate_2g0_shipping_post()
+    // {
+    //     try {
+    //         $raw_input = file_get_contents("php://input");
+    //         $data      = json_decode($raw_input, true);
+
+    //         if (!$data) {
+    //             return $this->response([
+    //                 'status'  => 'error',
+    //                 'message' => 'Invalid JSON input'
+    //             ], REST_Controller::HTTP_BAD_REQUEST);
+    //         }
+
+    //         $errors = $this->validateShippingData($data);
+
+    //         if (!empty($errors)) {
+    //             return $this->response([
+    //                 'status' => 'error',
+    //                 'errors' => $errors
+    //             ], REST_Controller::HTTP_BAD_REQUEST);
+    //         }
+
+    //         $data = $this->normalizeShippingData($data);
+
+    //         switch ($data['delivery_type']) {
+    //             case 'gen_cargo':
+    //                 $res = $this->calculateGenCargo($data);
+    //                 break;
+    //             case 'lcl':
+    //                 $res = $this->calculateSeaLcl($data);
+    //                 break;
+    //             case 'fcl':
+    //                 $res = $this->calculateFCL($data);
+    //                 break;
+    //             default:
+    //                 return $this->response([
+    //                     'status'  => 'error',
+    //                     'message' => 'Invalid delivery_type'
+    //                 ], REST_Controller::HTTP_BAD_REQUEST);
+    //         }
+
+    //         if (isset($res['status']) && $res['status'] === 'error') {
+    //             return $this->response([
+    //                 'status'  => 'error',
+    //                 'message' => $res['message']
+    //             ], REST_Controller::HTTP_BAD_REQUEST);
+    //         }
+
+    //         if (!isset($res['status'])) {
+    //             $res['status'] = 'success';
+    //         }
+
+    //         $res['delivery_type'] = $data['delivery_type'];
+
+    //         return $this->response($res, REST_Controller::HTTP_OK);
+
+    //     } catch (Exception $e) {
+    //         return $this->response([
+    //             'status'  => 'error',
+    //             'message' => 'Server error',
+    //             'details' => $e->getMessage()
+    //         ], REST_Controller::HTTP_INTERNAL_SERVER_ERROR);
+    //     }
+    // }
+
+    private function determine_delivery_type($items)
+    {
+        $totalWeight = 0;
+        $totalLength = 0;
+        $totalWidth  = 0;
+        $totalHeight = 0;
+
+        foreach ($items as $item) {
+            $qty = (int) $item['quantity'];
+
+            $totalWeight += (float) $item['weight'] * $qty;
+            $totalLength += (float) $item['length'] * $qty;
+            $totalWidth  += (float) $item['width']  * $qty;
+            $totalHeight += (float) $item['height'] * $qty;
+        }
+
+        // Check Air eligibility
+        if (
+            $totalLength <= 120 &&
+            $totalWidth  <= 120 &&
+            $totalHeight <= 120 &&
+            $totalWeight <= 150
+        ) {
+            return 'gen_cargo';
+        }
+
+        // Check LCL eligibility
+        if (
+            $totalLength <= 580 &&
+            $totalWidth  <= 227 &&
+            $totalHeight <= 220 &&
+            $totalWeight <= 2500
+        ) {
+            return 'lcl';
+        }
+
+        // Fallback to FCL
+        return 'fcl';
     }
 
     // ─────────────────────────────────────────────
@@ -295,13 +406,21 @@ class Calculator extends REST_Controller
 
     private function calculateFCL($data)
     {
+        // fcl_type is required — check first
+        if (!isset($data['fcl_type']) || empty($data['fcl_type'])) {
+            return [
+                'status'  => 'error',
+                'message' => 'Please complete required parameters'
+            ];
+        }
+
         $fclType = $data['fcl_type'] === '20ftr' ? 3
             : ($data['fcl_type'] === '40ftr' ? 4 : null);
 
         if ($fclType === null) {
             return [
                 'status'  => 'error',
-                'message' => 'Invalid FCL Type'
+                'message' => 'Invalid fcl_type. Accepted values: 20ftr, 40ftr'
             ];
         }
 
@@ -412,17 +531,6 @@ class Calculator extends REST_Controller
     // ─────────────────────────────────────────────
     // SEA-LCL
     // ─────────────────────────────────────────────
-
-    public function test_sea_lcl_post()
-    {
-        $json = file_get_contents('php://input');
-        $data = json_decode($json, true);
-
-        $res = $this->calculateSeaLcl($data);
-
-        $this->response($res, REST_Controller::HTTP_OK);
-    }
-
     private function calculateSeaLcl($data)
     {
         $origin      = $this->traceLclAddres($data['origin']);
@@ -868,7 +976,7 @@ class Calculator extends REST_Controller
             'destination',
             'items',
             'declared_value',
-            'delivery_type'
+            // 'delivery_type'
         ];
 
         foreach ($required as $field) {
@@ -912,10 +1020,10 @@ class Calculator extends REST_Controller
         }
 
         // delivery_type validation
-        $validDeliveryTypes = ['gen_cargo', 'lcl', 'fcl'];
-        if (isset($data['delivery_type']) && !in_array($data['delivery_type'], $validDeliveryTypes)) {
-            $errors['delivery_type'] = "Invalid delivery_type. Accepted values: " . implode(', ', $validDeliveryTypes);
-        }
+        // $validDeliveryTypes = ['gen_cargo', 'lcl', 'fcl'];
+        // if (isset($data['delivery_type']) && !in_array($data['delivery_type'], $validDeliveryTypes)) {
+        //     $errors['delivery_type'] = "Invalid delivery_type. Accepted values: " . implode(', ', $validDeliveryTypes);
+        // }
 
         // serviceType required for lcl and fcl
         $serviceTypeRequired = ['lcl', 'fcl'];
