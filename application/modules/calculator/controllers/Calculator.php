@@ -73,6 +73,7 @@ class Calculator extends REST_Controller
 
             $errors = $this->validateShippingData($data);
 
+
             $checkOrigin = $this->determineOriginAddress($data['origin'], $data['destination'], $data['delivery_type']);
 
 
@@ -122,7 +123,6 @@ class Calculator extends REST_Controller
                     'status' => 'error',
                     'delivery_type' => $data['delivery_type'],
                     'message' => $res['message'],
-                    $res
                 ], REST_Controller::HTTP_BAD_REQUEST);
             }
 
@@ -139,7 +139,7 @@ class Calculator extends REST_Controller
 
             $res['delivery_type'] = $data['delivery_type'];
 
-            return $this->response([$res], REST_Controller::HTTP_OK);
+            return $this->response($res, REST_Controller::HTTP_OK);
 
         } catch (Exception $e) {
             return $this->response([
@@ -149,8 +149,9 @@ class Calculator extends REST_Controller
             ], REST_Controller::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
-    
+
     // public function calculate_2g0_shipping_post()
+
     // {
     //     try {
     //         $raw_input = file_get_contents("php://input");
@@ -215,19 +216,13 @@ class Calculator extends REST_Controller
     //     }
     // }
 
+
+
     private function determineOriginAddress($origin, $destination, $delivery_type)
     {
         $originRegionTrace = $this->traceRegion($origin);
         $destinationRegionTrace = $this->traceRegion($destination);
 
-          $isOSA = $originRegionTrace['fwd'] === 'OSA' || $destinationRegionTrace['fwd'] === 'OSA';
-
-        if ($isOSA) {
-            return [
-                'status' => 'error',
-                'message' => 'Origin or Destination is Out of Serviceable Area'
-            ];
-        }
         if ($delivery_type === 'lcl') {
 
             $luzionRegions = [1, 2]; // 1 = NCR, 2 = Luzon
@@ -314,18 +309,33 @@ class Calculator extends REST_Controller
         }
 
         if (
-            (!isset($origin['location_code']) && $origin['fwd'] != 'OTD') ||
-            (!isset($destination['location_code']) && $destination['fwd'] != 'OTD')
+            (!isset($origin['location_code'])) ||
+            (!isset($destination['location_code']))
         ) {
+
+        }
+
+
+
+        $isOSA = $origin['fwd'] === 'OSA';
+        if ($isOSA) {
             return [
                 'status' => 'error',
-                'message' => 'Invalid region data',
+                'message' => 'Origin Address is Out of Reviceable Area',
                 $origin,
                 $destination
             ];
         }
 
-      
+        $isOSA = $destination['fwd'] === 'OSA';
+        if ($isOSA) {
+            return [
+                'status' => 'error',
+                'message' => 'Detionation Address is Out of Reviceable Area',
+                $origin,
+                $destination
+            ];
+        }
 
         $weight = $data['weight'];
         $isOTD = ($destination['fwd'] === 'OTD');
@@ -626,7 +636,7 @@ class Calculator extends REST_Controller
         if (!$originCluster) {
             return [
                 'status' => 'error',
-                'message' => 'Unable to resolve origin cluster'
+                'message' => 'Unable to resolve origin cluster',
             ];
         }
 
@@ -637,13 +647,14 @@ class Calculator extends REST_Controller
             ];
         }
 
+
         // Check origin region — LCL must originate from Luzon only
-        $originRegion = $this->traceRegion($data['origin']);
+        $originRegion = $this->modelrepo->getRegionFromProvince($origin['province']);
 
         if (!$originRegion || !$originRegion['region_id']) {
             return [
                 'status' => 'error',
-                'message' => 'Unable to resolve origin region'
+                'message' => 'Unable to resolve origin region',
             ];
         }
 
@@ -651,9 +662,10 @@ class Calculator extends REST_Controller
         if (!in_array($originRegion['region_id'], $luzionRegions)) {
             return [
                 'status' => 'error',
-                'message' => 'Sea LCL shipments must originate from Luzon only'
+                'message' => 'Sea LCL shipments must originate from Luzon only',
             ];
         }
+
 
         // Get LCL rate
         $lclRate = $this->modelrepo->getLclRate(

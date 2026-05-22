@@ -24,7 +24,7 @@ class Calculator_model extends CI_Model
             }
 
             return $query->num_rows() > 0 ? $query->row_array() : false;
-            
+
         } else {
             return false;
         }
@@ -52,7 +52,7 @@ class Calculator_model extends CI_Model
         $this->db->like('city', $city);
 
 
-        $query = $this->db->get('tbl_servicable_areas');
+        $query = $this->db->get('tbl_serviceable_areas');
 
         if (!$query) {
             return $this->db->error();
@@ -133,7 +133,7 @@ class Calculator_model extends CI_Model
         $this->db->where('barangay', $barangay);
 
 
-        $query = $this->db->get('tbl_servicable_areas');
+        $query = $this->db->get('tbl_serviceable_areas');
 
         if ($query === false) {
             return $this->db->error();
@@ -145,10 +145,10 @@ class Calculator_model extends CI_Model
             if ($det['is_serviceable'] == 1) {
                 $type = 'SA';
             } else {
-                $type = 'OSA';
+                $type = 'OTD';
             }
         } else {
-            $type = 'OTD';
+            $type = 'OSA';
         }
 
         return $type;
@@ -242,9 +242,8 @@ class Calculator_model extends CI_Model
         // Step 1: Get location_code
         $this->db->select('location_code');
         $this->db->where('province', $province);
-        $this->db->where('city', $city);
 
-        $query = $this->db->get('tbl_servicable_areas');
+        $query = $this->db->get('tbl_serviceable_areas');
 
         if (!$query) {
             return $this->db->error();
@@ -290,6 +289,65 @@ class Calculator_model extends CI_Model
         $clusterData['location_code'] = $location_code;
 
         return $clusterData;
+    }
+
+    public function getRegionFromProvince($province)
+    {
+        $this->db->select('location_code');
+        $this->db->where('province', $province);
+
+
+        $query = $this->db->get('tbl_serviceable_areas');
+
+        if (!$query) {
+            return $this->db->error();
+        }
+
+        if ($query->num_rows() == 0) {
+            return false;
+        }
+
+        $location_code = $query->row_array()['location_code'];
+
+        $this->db->select('cluster_id');
+        $this->db->where('location_code', $location_code);
+
+        $query = $this->db->get('tbl_locations');
+
+        if (!$query) {
+            return $this->db->error();
+        }
+
+        if ($query->num_rows() == 0) {
+            return false;
+        }
+
+        $locationData = $query->row_array();
+        $cluster_id = $locationData['cluster_id'];
+
+        $this->db->select('region_id');
+        $this->db->where('cluster_id', $cluster_id);
+
+        $query = $this->db->get('tbl_clusters');
+
+        if (!$query) {
+            return $this->db->error();
+        }
+
+        if ($query->num_rows() == 0) {
+            return false;
+        }
+
+        $region_id = $query->row_array()['region_id'];
+
+
+       
+
+        // ✅ Final return including cluster_name + location_code
+        return [
+            'region_id' => $region_id
+        ];
+
     }
 
     public function getLclRate($origin_cluster_id, $dest_cluster_id)
