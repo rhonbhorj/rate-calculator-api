@@ -1,7 +1,20 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
+if (!function_exists('setCorsHeaders')) {
+    function setCorsHeaders()
+    {
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE');
+        header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-API-KEY');
 
-if (! function_exists('checkHeader')) {
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            http_response_code(200);
+            exit(0);
+        }
+    }
+}
+
+if (!function_exists('checkHeader')) {
 
     function getHeaders()
     {
@@ -27,26 +40,24 @@ if (! function_exists('checkHeader')) {
 
     function checkHeader($ci_instance)
     {
-        $ci_instance->load->model('api/api_model','model_repo');
-      
-        
-        $AVR = true;
+        $ci_instance->load->model('calculator/calculator_model', 'model_repo');
+
+
         date_default_timezone_set('Asia/Manila');
 
         $header = getHeaders();
-        $getarr1 = array_keys($header);
 
         $resp = array(); // Initialize $resp array
 
         // if (array_key_exists('X-API-KEY', $header) != true || array_key_exists('X-API-USERNAME', $header) != true || array_key_exists('X-API-PASSWORD', $header) != true) {
-            if (array_key_exists('X-API-KEY', $header) != true ) {
+        if (array_key_exists('X-API-KEY', $header) != true) {
             $resp['status'] = FALSE;
-             $resp['status_code'] = 401;
+            $resp['status_code'] = 401;
             $resp['message'] = 'Unauthorized - X-API-KEY required';
         } else {
             $access = array(
                 'key' => ltrim($header['X-API-KEY'])
-               
+
             );
 
             $apihders = $ci_instance->model_repo->chk_access($access);
@@ -54,14 +65,14 @@ if (! function_exists('checkHeader')) {
             if ($apihders) {
 
                 // If $apihders is true, set $resp to $apihders
-                if($apihders['status']!=1){
+                if ($apihders['active'] != 1) {
                     $resp['status'] = FALSE;
                     $resp['status_code'] = 403;
-                    $resp['message'] = "API access is currently inactive.";  
-                }else{
+                    $resp['message'] = "API access is currently inactive.";
+                } else {
                     return $apihders;
                 }
-              
+
             } else {
                 $resp['status'] = FALSE;
                 $resp['status_code'] = 403;

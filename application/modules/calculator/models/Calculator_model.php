@@ -12,6 +12,37 @@ class Calculator_model extends CI_Model
         parent::__construct();
     }
 
+    public function chk_access($data)
+    {
+        if ($data) {
+            $this->db->where('key', $data['key']);
+
+            $query = $this->db->get('tbl_keys');
+
+            if (!$query) {
+                return $this->db->error();
+            }
+
+            return $query->num_rows() > 0 ? $query->row_array() : false;
+            
+        } else {
+            return false;
+        }
+    }
+    public function fetchNgsiRate()
+    {
+        $this->db->select('rate, is_active');
+        $this->db->where('id', 1);
+
+        $query = $this->db->get('tbl_ngsi_rates');
+
+        if (!$query) {
+            return $this->db->error();
+        }
+
+        return $query->num_rows() > 0 ? $query->row_array() : false;
+
+    }
     public function getRegionFromAddress($city, $province)
     {
         // Step 1: Get location_code
@@ -176,9 +207,8 @@ class Calculator_model extends CI_Model
         return $query->num_rows() > 0 ? $query->result_array() : false;
     }
 
-    public function chkFclDestination($fcl_type, $destination)
+    public function chkFclDestination($destination)
     {
-        $this->db->where('category_id', $fcl_type);
         $this->db->where('destination', $destination);
 
         $query = $this->db->get('tbl_fcl_rates');
@@ -207,57 +237,58 @@ class Calculator_model extends CI_Model
 
         return $query->num_rows() > 0 ? $query->row_array()[$serviceType] : false;
     }
-    public function get_cluster_code($city, $province){
+    public function get_cluster_code($city, $province)
+    {
         // Step 1: Get location_code
         $this->db->select('location_code');
         $this->db->where('province', $province);
         $this->db->where('city', $city);
- 
+
         $query = $this->db->get('tbl_servicable_areas');
- 
+
         if (!$query) {
             return $this->db->error();
         }
- 
+
         if ($query->num_rows() == 0) {
             return false;
         }
- 
+
         $location_code = $query->row_array()['location_code'];
- 
+
         // Step 2: Get cluster_id
         $this->db->select('cluster_id');
         $this->db->where('location_code', $location_code);
- 
+
         $query = $this->db->get('tbl_locations');
- 
+
         if (!$query) {
             return $this->db->error();
         }
- 
+
         if ($query->num_rows() == 0) {
             return false;
         }
- 
+
         $cluster_id = $query->row_array()['cluster_id'];
- 
+
         // Step 3: Get cluster_name
         $this->db->select('cluster_id, cluster_name');
         $this->db->where('cluster_id', $cluster_id);
- 
+
         $query = $this->db->get('tbl_clusters');
- 
+
         if (!$query) {
             return $this->db->error();
         }
- 
+
         if ($query->num_rows() == 0) {
             return false;
         }
- 
-        $clusterData              = $query->row_array();
+
+        $clusterData = $query->row_array();
         $clusterData['location_code'] = $location_code;
- 
+
         return $clusterData;
     }
 
@@ -265,13 +296,13 @@ class Calculator_model extends CI_Model
     {
         $this->db->where('origin_cluster_id', $origin_cluster_id);
         $this->db->where('destination_cluster_id', $dest_cluster_id);
- 
+
         $query = $this->db->get('tbl_lcl_rates');
- 
+
         if (!$query) {
             return $this->db->error();
         }
- 
+
         return $query->num_rows() > 0 ? $query->row_array() : false;
     }
 
@@ -279,28 +310,28 @@ class Calculator_model extends CI_Model
     {
         $this->db->where('origin_cluster_id', $origin_cluster_id);
         $this->db->where('destination_cluster_id', $dest_cluster_id);
- 
+
         $query = $this->db->get('tbl_lcl_tfi_rates');
- 
+
         if (!$query) {
             return $this->db->error();
         }
- 
+
         return $query->num_rows() > 0 ? $query->row_array() : false;
     }
 
     public function fetchLclOtherRates()
     {
         $this->db->where('category_id', 2);
- 
+
         $query = $this->db->get('tbl_charges');
- 
+
         if (!$query) {
             return $this->db->error();
         }
- 
+
         return $query->num_rows() > 0 ? $query->result_array() : false;
     }
 
-    
+
 }
