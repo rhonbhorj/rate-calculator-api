@@ -59,6 +59,16 @@ class Calculator extends REST_Controller
                 $this->response($err, REST_Controller::HTTP_BAD_REQUEST);
             }
 
+            $errors = $this->validateShippingData($data);
+
+            if ($errors) {
+                return $this->response([
+                    'status' => 'error',
+                    'message' => $errors
+                ], REST_Controller::HTTP_BAD_REQUEST);
+            }
+
+
             if (!$data) {
                 return $this->response([
                     'status' => 'error',
@@ -71,8 +81,7 @@ class Calculator extends REST_Controller
                 $data['delivery_type'] = $this->determine_delivery_type($data['items']);
             }
 
-            $errors = $this->validateShippingData($data);
-
+            $errors = $this->validateOtherData($data);
 
             $checkOrigin = $this->determineOriginAddress($data['origin'], $data['destination'], $data['delivery_type']);
 
@@ -92,8 +101,7 @@ class Calculator extends REST_Controller
                 return $this->response([
                     'status' => 'error',
                     'delivery_type' => $data['delivery_type'],
-                    'message' => 'Please complete required parameters',
-                    'errors' => $errors
+                    'message' => $errors
                 ], REST_Controller::HTTP_BAD_REQUEST);
             }
 
@@ -1120,8 +1128,6 @@ class Calculator extends REST_Controller
             }
         }
 
-
-
         // items validation
         if (isset($data['items'])) {
             if (!is_array($data['items']) || empty($data['items'])) {
@@ -1156,13 +1162,25 @@ class Calculator extends REST_Controller
             $errors['declared_value'] = "declared_value must be numeric";
         }
 
-        // delivery_type validation
-        // $validDeliveryTypes = ['gen_cargo', 'lcl', 'fcl'];
-        // if (isset($data['delivery_type']) && !in_array($data['delivery_type'], $validDeliveryTypes)) {
-        //     $errors['delivery_type'] = "Invalid delivery_type. Accepted values: " . implode(', ', $validDeliveryTypes);
-        // }
+        $serviceTypeRequired = ['lcl', 'fcl'];
+        if (isset($data['delivery_type']) && in_array($data['delivery_type'], $serviceTypeRequired)) {
+            if (!isset($data['serviceType']) || trim($data['serviceType']) === '') {
+                $errors['serviceType'] = "serviceType is required for " . $data['delivery_type'];
+            } else {
+                $validServiceTypes = ['P2P', 'P2D', 'D2P', 'D2D'];
+                if (!in_array(strtoupper(trim($data['serviceType'])), $validServiceTypes)) {
+                    $errors['serviceType'] = "Invalid serviceType. Accepted values: " . implode(', ', $validServiceTypes);
+                }
+            }
+        }
 
-        // serviceType required for lcl and fcl
+        return $errors;
+    }
+
+    public function validateOtherData($data)
+    {
+        $errors = [];
+
         $serviceTypeRequired = ['lcl', 'fcl'];
         if (isset($data['delivery_type']) && in_array($data['delivery_type'], $serviceTypeRequired)) {
             if (!isset($data['serviceType']) || trim($data['serviceType']) === '') {
@@ -1199,6 +1217,7 @@ class Calculator extends REST_Controller
         }
 
         return $errors;
+
     }
 
     private function normalizeShippingData($data)
