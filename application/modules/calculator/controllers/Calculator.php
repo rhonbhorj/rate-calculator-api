@@ -49,15 +49,15 @@ class Calculator extends REST_Controller
         try {
             $raw_input = file_get_contents("php://input");
             $data = json_decode($raw_input, true);
-            // $head = checkHeader($this);
+            $head = checkHeader($this);
 
 
-            // if (isset($head['status']) && $head['status'] === false) {
+            if (isset($head['status']) && $head['status'] === false) {
 
-            //     $err = $head;
+                $err = $head;
 
-            //     $this->response($err, REST_Controller::HTTP_BAD_REQUEST);
-            // }
+                $this->response($err, REST_Controller::HTTP_BAD_REQUEST);
+            }
 
             if (!$data) {
                 return $this->response([
@@ -76,9 +76,7 @@ class Calculator extends REST_Controller
 
             $checkOrigin = $this->determineOriginAddress($data['origin'], $data['destination'], $data['delivery_type']);
 
-
             if (
-                !empty($errors['serviceType']) &&
                 !empty($checkOrigin) &&
                 isset($checkOrigin['status']) &&
                 $checkOrigin['status'] === 'error'
@@ -220,6 +218,10 @@ class Calculator extends REST_Controller
 
     private function determineOriginAddress($origin, $destination, $delivery_type)
     {
+
+        if ($delivery_type == 'gen_cargo')
+            return;
+
         $originRegionTrace = $this->traceRegion($origin);
         $destinationRegionTrace = $this->traceRegion($destination);
 
@@ -232,6 +234,7 @@ class Calculator extends REST_Controller
                     'message' => 'Sea LCL shipments must originate from Luzon only'
                 ];
             }
+
         } else {
 
             if ($originRegionTrace['cluster_name'] !== 'MNL') {
@@ -246,7 +249,7 @@ class Calculator extends REST_Controller
             if (!$validPort) {
                 return [
                     'status' => 'error',
-                    'message' => 'No valid delivery port available for the selected area.'
+                    'message' => 'No valid delivery port available for the selected area.',
                 ];
             }
         }
@@ -511,24 +514,7 @@ class Calculator extends REST_Controller
             ];
         }
 
-        $origin = $this->traceRegion($data['origin']);
         $destination = $this->traceRegion($data['destination']);
-
-
-        // if ($origin['cluster_name'] !== 'MNL') {
-        //     return [
-        //         'status' => 'error',
-        //         'message' => 'Full Container Load (FCL) shipments must originate from Metro Manila.',
-        //     ];
-        // }
-        // $validPort = $this->modelrepo->chkFclDestination($fclType, $destination['location_code']);
-
-        // if (!$validPort) {
-        //     return [
-        //         'status' => 'error',
-        //         'message' => 'No valid delivery port available for the selected area.'
-        //     ];
-        // }
 
         $isOsa = $destination['fwd'] === 'OSA';
 
@@ -549,13 +535,15 @@ class Calculator extends REST_Controller
 
         return [
             'status' => 'success',
+            'destination_port' => $destination['location_code'],
             'shippingFeeBreakdown' => $fclCalculations['shipping_fee_breakdown'],
-            'total_delivery_fee' => $fclCalculations['total_delivery_fee']
+            'total_delivery_fee' => $fclCalculations['total_delivery_fee'],
         ];
     }
 
     private function calculateFclCharges($fclCharges, $fclRate, $isVisayas, $declaredValue)
     {
+
         $allowableAmount = 0;
         $valuationFee = 0;
         $fuelSurcharge = 0;
@@ -611,7 +599,7 @@ class Calculator extends REST_Controller
                 'subtotal' => $subtotal,
                 'document_stamp' => $documentStamp
             ],
-            'total_delivery_fee' => $shippingFee
+            'total_delivery_fee' => $shippingFee,
         ];
     }
 
@@ -990,11 +978,9 @@ class Calculator extends REST_Controller
 
     private function traceRegion($address)
     {
-        $parts = explode(',', $address);
-
-        $barangay = trim($parts[0]);
-        $city = trim($parts[1]);
-        $province = trim($parts[2]);
+        $barangay = $address['brgy'];
+        $city = $address['city'];
+        $province = $address['province'];
 
         $fwd = $this->modelrepo->chkAddress($barangay, $city, $province);
         $res = $this->modelrepo->getRegionFromAddress($city, $province);
@@ -1016,11 +1002,9 @@ class Calculator extends REST_Controller
 
     private function traceLclAddres($address)
     {
-        $parts = explode(',', $address);
-
-        $barangay = trim($parts[0]);
-        $city = trim($parts[1]);
-        $province = trim($parts[2]);
+        $barangay = $address['brgy'];
+        $city = $address['city'];
+        $province = $address['province'];
 
         $fwd = $this->modelrepo->chkAddress($barangay, $city, $province);
         $cluster = $this->modelrepo->get_cluster_code($city, $province);
@@ -1038,7 +1022,12 @@ class Calculator extends REST_Controller
         $totalCbm = 0;
 
         foreach ($items as $item) {
-            $totalCbm += (($item['length'] * $item['width'] * $item['height']) / 3500) * $item['quantity'];
+            // Convert cm to meters
+            $length = $item['length'] / 100;
+            $width = $item['width'] / 100;
+            $height = $item['height'] / 100;
+
+            $totalCbm += (($length * $width * $height) / 3500) * $item['quantity'];
         }
 
         return max($totalCbm, 0.5);
@@ -1117,6 +1106,21 @@ class Calculator extends REST_Controller
                 $errors[$field] = "$field is required";
             }
         }
+
+
+        $addressFields = ['brgy', 'city', 'province'];
+
+        foreach (['origin', 'destination'] as $location) {
+            if (!empty($data[$location]) && is_array($data[$location])) {
+                foreach ($addressFields as $subField) {
+                    if (!isset($data[$location][$subField]) || $data[$location][$subField] === '') {
+                        $errors["$location.$subField"] = "$location $subField is required";
+                    }
+                }
+            }
+        }
+
+
 
         // items validation
         if (isset($data['items'])) {
@@ -1210,8 +1214,17 @@ class Calculator extends REST_Controller
         }, $data['items']);
 
         $normalized = [
-            'origin' => trim($data['origin']),
-            'destination' => trim($data['destination']),
+
+            'origin' => [
+                'brgy' => trim($data['origin']['brgy']),
+                'city' => trim($data['origin']['city']),
+                'province' => trim($data['origin']['Province'] ?? $data['origin']['province']),
+            ],
+            'destination' => [
+                'brgy' => trim($data['destination']['brgy']),
+                'city' => trim($data['destination']['city']),
+                'province' => trim($data['destination']['Province'] ?? $data['destination']['province']),
+            ],
             'items' => $items,
             'weight' => $this->calculate_total_weight($items),
             'declared_value' => (float) $data['declared_value'],
