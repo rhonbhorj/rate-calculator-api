@@ -202,6 +202,7 @@ class Calculator extends REST_Controller
         $isDestGenCar = $destination['region'] === 'Luzon' || $destination['region'] === 'NCR';
 
         if ($isOriginGenCar && $isDestGenCar) {
+
             return 'gen_cargo';
         }
 
@@ -211,21 +212,16 @@ class Calculator extends REST_Controller
             $maxLcl = (int) $item['max_lcl_items'];
             $max20Ftr = (int) $item['max_20_ftr'];
 
-            if($qty <= $maxGenCargo){
+            if ($qty <= $maxGenCargo) {
                 return 'gen_cargo';
             }
 
-            if($qty <= $maxLcl){
+            if ($qty <= $maxLcl) {
                 return 'lcl';
             }
 
-            if($qty <= $max20Ftr){
-                return 'fcl';
-            }
+            return 'fcl';
         }
-
-        // fallback
-        return 'gen_cargo';
 
     }
 
@@ -235,6 +231,7 @@ class Calculator extends REST_Controller
 
     private function calculateGenCargo($data, $origin, $destination)
     {
+<<<<<<< HEAD
         if (!$origin || !$destination) {
             return [
                 'status' => 'error',
@@ -248,6 +245,8 @@ class Calculator extends REST_Controller
         ) {
 
         }
+=======
+>>>>>>> c05bbd6 (fcl service type logic adjusted)
 
 
 
@@ -432,17 +431,19 @@ class Calculator extends REST_Controller
 
     private function calculateFCL($data, $destination)
     {
-        // fcl_type is required — check first
-        if (!isset($data['fcl_type']) || empty($data['fcl_type'])) {
-            return [
-                'status' => 'error',
-                'message' => 'Please complete required parameters'
-            ];
+
+        $max20Ftr = 0;
+        $totalQty = 0;
+
+        foreach ($data['items'] as $item) {
+            $max20Ftr += $item['max_20_ftr'];
+            $totalQty += $item['quantity'];
         }
 
-        $fclType = $data['fcl_type'] === '20ftr' ? 3
-            : ($data['fcl_type'] === '40ftr' ? 4 : null);
+        $fclType = $totalQty > $max20Ftr ? 4 : 3;
+        $fclTypeName = $totalQty > $max20Ftr ? '40ftr' : '20ftr';
 
+<<<<<<< HEAD
         if ($fclType === null) {
             return [
                 'status' => 'error',
@@ -458,6 +459,16 @@ $service_type_adjusted = false;
             if($data['service_type'] === 'p2d'){
                 $data['service_type']  = 'p2p';
             }elseif($data['service_type'] === 'd2d'){
+=======
+
+        $isOsa = $destination['fwd'] === 'OSA';
+        $service_type_adjusted = false;
+
+        if ($isOsa && ($data['service_type'] === 'p2d' || $data['service_type'] === 'd2d')) {
+            if ($data['service_type'] === 'p2d') {
+                $data['service_type'] = 'p2p';
+            } elseif ($data['service_type'] === 'd2d') {
+>>>>>>> c05bbd6 (fcl service type logic adjusted)
                 $data['service_type'] = 'd2p';
             }
 
@@ -475,9 +486,16 @@ $service_type_adjusted = false;
         return [
             'status' => 'success',
             'destination_port' => $destination['location_code'],
+            'service_type_adjusted' => $service_type_adjusted,
+            'service_type' => $data['service_type'],
+            'fcl_type' => $fclTypeName,
             'shippingFeeBreakdown' => $fclCalculations['shipping_fee_breakdown'],
+<<<<<<< HEAD
             'total_delivery_fee' => $fclCalculations['total_delivery_fee'],
             'service_type_adjusted' => $service_type_adjusted
+=======
+            'total_delivery_fee' => $fclCalculations['total_delivery_fee']
+>>>>>>> c05bbd6 (fcl service type logic adjusted)
         ];
     }
 
@@ -1089,6 +1107,9 @@ $service_type_adjusted = false;
                         'max_gen_cargo_items',
                         'max_lcl_items',
                         'max_20_ftr',
+                        'length',
+                        'width',
+                        'height',
                         'quantity'
                     ];
 
@@ -1222,6 +1243,18 @@ $service_type_adjusted = false;
 
                 'max_20_ftr' => isset($item['max_20_ftr'])
                     ? (int) $item['max_20_ftr']
+                    : 0,
+
+                'length' => isset($item['length'])
+                    ? (int) $item['length']
+                    : 0,
+
+                'width' => isset($item['wudth'])
+                    ? (int) $item['width']
+                    : 0,
+
+                'height' => isset($item['height'])
+                    ? (int) $item['height']
                     : 0,
 
                 'quantity' => isset($item['quantity'])
