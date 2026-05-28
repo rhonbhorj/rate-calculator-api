@@ -231,24 +231,7 @@ class Calculator extends REST_Controller
 
     private function calculateGenCargo($data, $origin, $destination)
     {
-<<<<<<< HEAD
-        if (!$origin || !$destination) {
-            return [
-                'status' => 'error',
-                'message' => 'Invalid origin or destination'
-            ];
-        }
-
-        if (
-            (!isset($origin['location_code'])) ||
-            (!isset($destination['location_code']))
-        ) {
-
-        }
-=======
->>>>>>> c05bbd6 (fcl service type logic adjusted)
-
-
+    
 
         $isOSA = $origin['fwd'] === 'OSA';
         if ($isOSA) {
@@ -443,7 +426,6 @@ class Calculator extends REST_Controller
         $fclType = $totalQty > $max20Ftr ? 4 : 3;
         $fclTypeName = $totalQty > $max20Ftr ? '40ftr' : '20ftr';
 
-<<<<<<< HEAD
         if ($fclType === null) {
             return [
                 'status' => 'error',
@@ -459,16 +441,6 @@ $service_type_adjusted = false;
             if($data['service_type'] === 'p2d'){
                 $data['service_type']  = 'p2p';
             }elseif($data['service_type'] === 'd2d'){
-=======
-
-        $isOsa = $destination['fwd'] === 'OSA';
-        $service_type_adjusted = false;
-
-        if ($isOsa && ($data['service_type'] === 'p2d' || $data['service_type'] === 'd2d')) {
-            if ($data['service_type'] === 'p2d') {
-                $data['service_type'] = 'p2p';
-            } elseif ($data['service_type'] === 'd2d') {
->>>>>>> c05bbd6 (fcl service type logic adjusted)
                 $data['service_type'] = 'd2p';
             }
 
@@ -490,12 +462,8 @@ $service_type_adjusted = false;
             'service_type' => $data['service_type'],
             'fcl_type' => $fclTypeName,
             'shippingFeeBreakdown' => $fclCalculations['shipping_fee_breakdown'],
-<<<<<<< HEAD
             'total_delivery_fee' => $fclCalculations['total_delivery_fee'],
             'service_type_adjusted' => $service_type_adjusted
-=======
-            'total_delivery_fee' => $fclCalculations['total_delivery_fee']
->>>>>>> c05bbd6 (fcl service type logic adjusted)
         ];
     }
 
