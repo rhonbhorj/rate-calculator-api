@@ -1162,6 +1162,7 @@ $service_type_adjusted = false;
                     "service_type must be one of: " . implode(', ', $allowedServiceTypes);
             }
         }
+        
 
         // for_crating validation
         if (isset($data['for_crating'])) {
