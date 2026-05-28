@@ -16,6 +16,7 @@ class Calculator_model extends CI_Model
     {
         if ($data) {
             $this->db->where('key', $data['key']);
+            
 
             $query = $this->db->get('tbl_keys');
 

@@ -1,5 +1,4 @@
 RewriteEngine On
-RewriteBase /rate-calculator-api/
 
 # Redirect Trailing Slashes (optional but good)
 RewriteCond %{REQUEST_FILENAME} !-d
