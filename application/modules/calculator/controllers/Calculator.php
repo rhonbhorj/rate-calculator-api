@@ -85,7 +85,7 @@ class Calculator extends REST_Controller
             }
 
 
-            $checkOrigin = $this->determineOriginAddress($data['origin'], $data['destination'], $data['delivery_type']);
+            $checkOrigin = $this->determineOriginAddress($originTrace, $destinationTrace, $data['delivery_type']);
 
             if (
                 !empty($checkOrigin) &&
@@ -111,13 +111,13 @@ class Calculator extends REST_Controller
 
             switch ($data['delivery_type']) {
                 case 'gen_cargo':
-                    $res = $this->calculateGenCargo($data);
+                    $res = $this->calculateGenCargo($data, $originTrace, $destinationTrace);
                     break;
                 case 'lcl':
                     $res = $this->calculateSeaLcl($data);
                     break;
                 case 'fcl':
-                    $res = $this->calculateFCL($data);
+                    $res = $this->calculateFCL($data, $destinationTrace);
                     break;
                 default:
                     return $this->response([
@@ -165,13 +165,10 @@ class Calculator extends REST_Controller
         if ($delivery_type == 'gen_cargo')
             return;
 
-        $originRegionTrace = $this->traceRegion($origin);
-        $destinationRegionTrace = $this->traceRegion($destination);
-
         if ($delivery_type === 'lcl') {
 
             $luzionRegions = [1, 2]; // 1 = NCR, 2 = Luzon
-            if (!in_array($originRegionTrace['region_id'], $luzionRegions)) {
+            if (!in_array($origin['region_id'], $luzionRegions)) {
                 return [
                     'status' => 'error',
                     'message' => 'Sea LCL shipments must originate from Luzon only'
@@ -180,14 +177,14 @@ class Calculator extends REST_Controller
 
         } else {
 
-            if ($originRegionTrace['cluster_name'] !== 'MNL') {
+            if ($origin['cluster_name'] !== 'MNL') {
                 return [
                     'status' => 'error',
                     'message' => 'Full Container Load (FCL) shipments must originate from Metro Manila.',
                 ];
             }
 
-            $validPort = $this->modelrepo->chkFclDestination($destinationRegionTrace['location_code']);
+            $validPort = $this->modelrepo->chkFclDestination($destination['location_code']);
 
             if (!$validPort) {
                 return [
@@ -236,11 +233,8 @@ class Calculator extends REST_Controller
     // GEN CARGO (codev's code — untouched)
     // ─────────────────────────────────────────────
 
-    private function calculateGenCargo($data)
+    private function calculateGenCargo($data, $origin, $destination)
     {
-        $origin = $this->traceRegion($data['origin']);
-        $destination = $this->traceRegion($data['destination']);
-
         if (!$origin || !$destination) {
             return [
                 'status' => 'error',
@@ -323,6 +317,8 @@ class Calculator extends REST_Controller
 
         return [
             'status' => 'success',
+            "origin" => $origin,
+            "destination" => $destination,
             'isOTD' => $isOTD,
             'isIntraCity' => $isIntraCity,
             'shippingFeeBreakdown' => $breakdown['charges'],
@@ -434,7 +430,7 @@ class Calculator extends REST_Controller
     // FCL (codev's code — untouched)
     // ─────────────────────────────────────────────
 
-    private function calculateFCL($data)
+    private function calculateFCL($data, $destination)
     {
         // fcl_type is required — check first
         if (!isset($data['fcl_type']) || empty($data['fcl_type'])) {
@@ -454,15 +450,18 @@ class Calculator extends REST_Controller
             ];
         }
 
-        $destination = $this->traceRegion($data['destination']);
-
+        
         $isOsa = $destination['fwd'] === 'OSA';
+$service_type_adjusted = false; 
 
-        if ($isOsa && ($data['service_type'] === 'P2D' || $data['service_type'] === 'D2D')) {
-            return [
-                'status' => 'error',
-                'message' => 'Delivery is unavailable for the selected area. Port-to-door and door-to-door services are not supported.'
-            ];
+        if ($isOsa && ($data['service_type'] === 'p2d' || $data['service_type'] === 'd2d')) {
+            if($data['service_type'] === 'p2d'){
+                $data['service_type']  = 'p2p';
+            }elseif($data['service_type'] === 'd2d'){
+                $data['service_type'] = 'd2p';
+            }
+
+            $service_type_adjusted = true;
         }
 
         $fclRate = $this->modelrepo->fetchFclRates($fclType, $data['service_type'], $destination['location_code']);
@@ -478,6 +477,7 @@ class Calculator extends REST_Controller
             'destination_port' => $destination['location_code'],
             'shippingFeeBreakdown' => $fclCalculations['shipping_fee_breakdown'],
             'total_delivery_fee' => $fclCalculations['total_delivery_fee'],
+            'service_type_adjusted' => $service_type_adjusted
         ];
     }
 
@@ -532,6 +532,7 @@ class Calculator extends REST_Controller
         $shippingFee = round($subtotal + $documentStamp, 2);
 
         return [
+
             'shipping_fee_breakdown' => [
                 'valuation_charge' => $valuationFee,
                 'fuel_surcharge' => $fuelSurcharge,
