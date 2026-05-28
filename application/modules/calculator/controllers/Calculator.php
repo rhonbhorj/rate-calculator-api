@@ -208,43 +208,28 @@ class Calculator extends REST_Controller
             return 'gen_cargo';
         }
 
-
-        $totalWeight = 0;
-        $totalLength = 0;
-        $totalWidth = 0;
-        $totalHeight = 0;
-
         foreach ($items as $item) {
             $qty = (int) $item['quantity'];
+            $maxGenCargo = (int) $item['max_gen_cargo_items'];
+            $maxLcl = (int) $item['max_lcl_items'];
+            $max20Ftr = (int) $item['max_20_ftr'];
 
-            $totalWeight += (float) $item['weight'] * $qty;
-            $totalLength += (float) $item['length'] * $qty;
-            $totalWidth += (float) $item['width'] * $qty;
-            $totalHeight += (float) $item['height'] * $qty;
+            if($qty <= $maxGenCargo){
+                return 'gen_cargo';
+            }
+
+            if($qty <= $maxLcl){
+                return 'lcl';
+            }
+
+            if($qty <= $max20Ftr){
+                return 'fcl';
+            }
         }
 
-        // Check Air eligibility
-        if (
-            $totalLength <= 120 &&
-            $totalWidth <= 120 &&
-            $totalHeight <= 120 &&
-            $totalWeight <= 150
-        ) {
-            return 'gen_cargo';
-        }
+        // fallback
+        return 'gen_cargo';
 
-        // Check LCL eligibility
-        if (
-            $totalLength <= 580 &&
-            $totalWidth <= 227 &&
-            $totalHeight <= 220 &&
-            $totalWeight <= 2500
-        ) {
-            return 'lcl';
-        }
-
-        // Fallback to FCL
-        return 'fcl';
     }
 
     // ─────────────────────────────────────────────
