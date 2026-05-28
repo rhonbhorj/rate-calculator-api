@@ -545,6 +545,19 @@ $service_type_adjusted = false;
             ];
         }
 
+        $isOsa = $destination['fwd'] === 'OSA';
+        $service_type_adjusted = false;
+
+        if ($isOsa && ($data['service_type'] === 'p2d' || $data['service_type'] === 'd2d')) {
+            if ($data['service_type'] === 'p2d') {
+                $data['service_type'] = 'p2p';
+            } elseif ($data['service_type'] === 'd2d') {
+                $data['service_type'] = 'd2p';
+            }
+
+            $service_type_adjusted = true;
+        }
+
         $originCluster = $origin['cluster'];
         $destCluster = $destination['cluster'];
 
@@ -673,6 +686,8 @@ $service_type_adjusted = false;
                 'cbm' => round($cbm, 2),
                 'rate_per_cbm' => round($lclRate['per_cbm'], 2),
             ],
+            'service_type_adjusted' => $service_type_adjusted,
+            'service_type' => $data['service_type'],
             'shippingFeeBreakdown' => $breakdown['shipping_breakdown'],
             'total_delivery_fee' => $breakdown['total_delivery_fee']
         ];
