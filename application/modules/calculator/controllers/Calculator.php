@@ -79,12 +79,6 @@ class Calculator extends REST_Controller
             $originTrace = $this->traceRegion($data['origin']);
             $destinationTrace = $this->traceRegion($data['destination']);
 
-            // Auto-determine delivery_type from items
-            if (isset($data['items']) && is_array($data['items']) && !empty($data['items'])) {
-                $data['delivery_type'] = $this->determine_delivery_type($data['items'], $originTrace, $destinationTrace);
-            }
-
-
             $checkOrigin = $this->determineOriginAddress($originTrace, $destinationTrace, $data['delivery_type']);
 
             if (
@@ -195,36 +189,6 @@ class Calculator extends REST_Controller
         }
     }
 
-    private function determine_delivery_type($items, $origin, $destination)
-    {
-
-        $isOriginGenCar = $origin['region'] === 'Luzon' || $origin['region'] === 'NCR';
-        $isDestGenCar = $destination['region'] === 'Luzon' || $destination['region'] === 'NCR';
-
-        if ($isOriginGenCar && $isDestGenCar) {
-
-            return 'gen_cargo';
-        }
-
-        foreach ($items as $item) {
-            $qty = (int) $item['quantity'];
-            $maxGenCargo = (int) $item['max_gen_cargo_items'];
-            $maxLcl = (int) $item['max_lcl_items'];
-            $max20Ftr = (int) $item['max_20_ftr'];
-
-            if ($qty <= $maxGenCargo) {
-                return 'gen_cargo';
-            }
-
-            if ($qty <= $maxLcl) {
-                return 'lcl';
-            }
-
-            return 'fcl';
-        }
-
-    }
-
     // ─────────────────────────────────────────────
     // GEN CARGO (codev's code — untouched)
     // ─────────────────────────────────────────────
@@ -299,8 +263,6 @@ class Calculator extends REST_Controller
 
         return [
             'status' => 'success',
-            "origin" => $origin,
-            "destination" => $destination,
             'isOTD' => $isOTD,
             'isIntraCity' => $isIntraCity,
             'shippingFeeBreakdown' => $breakdown['charges'],
@@ -415,23 +377,8 @@ class Calculator extends REST_Controller
     private function calculateFCL($data, $destination)
     {
 
-        $max20Ftr = 0;
-        $totalQty = 0;
-
-        foreach ($data['items'] as $item) {
-            $max20Ftr += $item['max_20_ftr'];
-            $totalQty += $item['quantity'];
-        }
-
-        $fclType = $totalQty > $max20Ftr ? 4 : 3;
-        $fclTypeName = $totalQty > $max20Ftr ? '40ftr' : '20ftr';
-
-        if ($fclType === null) {
-            return [
-                'status' => 'error',
-                'message' => 'Invalid fcl_type. Accepted values: 20ftr, 40ftr'
-            ];
-        }
+        $fclTypeName = strtolower(trim($data['fcl_type']));
+        $fclType = $fclTypeName === '40ftr' ? 4 : 3;
 
         
         $isOsa = $destination['fwd'] === 'OSA';
@@ -520,6 +467,7 @@ $service_type_adjusted = false;
         return [
 
             'shipping_fee_breakdown' => [
+                'weight_charge' => round($fclRate, 2),
                 'valuation_charge' => $valuationFee,
                 'fuel_surcharge' => $fuelSurcharge,
                 'vat' => $vat,
@@ -635,7 +583,7 @@ $service_type_adjusted = false;
         $cbm = round($this->calculate_cbm($data['items']), 2);
 
         // Service type flags
-        $serviceType = $data['service_type'];
+        $serviceType = strtoupper($data['service_type']);
         $isDoorOrigin = in_array($serviceType, ['D2D', 'D2P']);
         $isDoorDest = in_array($serviceType, ['D2D', 'P2D']);
 
@@ -1040,11 +988,7 @@ $service_type_adjusted = false;
             'destination',
             'items',
             'declared_value',
-            'service_type',
-            'for_crating',
-            'breakbulk',
-            'perishable',
-            'storage_days',
+            'delivery_type',
         ];
 
         foreach ($required as $field) {
@@ -1052,6 +996,8 @@ $service_type_adjusted = false;
                 $errors[$field] = "$field is required";
             }
         }
+
+        $deliveryType = strtolower(trim($data['delivery_type'] ?? ''));
 
         $addressFields = ['brgy', 'city', 'province'];
 
@@ -1084,12 +1030,8 @@ $service_type_adjusted = false;
                         continue;
                     }
 
-                    // required fields based on your new payload
                     $itemRequired = [
                         'weight',
-                        'max_gen_cargo_items',
-                        'max_lcl_items',
-                        'max_20_ftr',
                         'length',
                         'width',
                         'height',
@@ -1112,9 +1054,6 @@ $service_type_adjusted = false;
 
                     // positive integer validation
                     $positiveIntegerFields = [
-                        'max_gen_cargo_items',
-                        'max_lcl_items',
-                        'max_20_ftr',
                         'quantity'
                     ];
 
@@ -1157,50 +1096,59 @@ $service_type_adjusted = false;
             $errors['declared_value'] = "declared_value must be numeric";
         }
 
-        // service_type validation
-        if (isset($data['service_type'])) {
-            $allowedServiceTypes = ['p2p', 'd2d', 'p2d', 'd2p'];
+        // delivery_type validation
+        if (isset($data['delivery_type'])) {
+            $allowedDeliveryTypes = ['gen_cargo', 'lcl', 'fcl'];
 
-            if (!in_array($data['service_type'], $allowedServiceTypes, true)) {
-                $errors['service_type'] =
-                    "service_type must be one of: " . implode(', ', $allowedServiceTypes);
+            if (!in_array(strtolower($data['delivery_type']), $allowedDeliveryTypes, true)) {
+                $errors['delivery_type'] =
+                    "delivery_type must be one of: " . implode(', ', $allowedDeliveryTypes);
             }
         }
-        
 
-        // for_crating validation
+        // service_type: required for lcl and fcl
+        if (in_array($deliveryType, ['lcl', 'fcl'])) {
+            if (!isset($data['service_type']) || $data['service_type'] === '') {
+                $errors['service_type'] = "service_type is required for $deliveryType";
+            } elseif (!in_array(strtolower($data['service_type']), ['p2p', 'd2d', 'p2d', 'd2p'], true)) {
+                $errors['service_type'] = "service_type must be one of: p2p, d2d, p2d, d2p";
+            }
+        }
+
+        // fcl_type: required for fcl
+        if ($deliveryType === 'fcl') {
+            if (!isset($data['fcl_type']) || $data['fcl_type'] === '') {
+                $errors['fcl_type'] = "fcl_type is required for fcl";
+            } elseif (!in_array(strtolower($data['fcl_type']), ['20ftr', '40ftr'], true)) {
+                $errors['fcl_type'] = "fcl_type must be one of: 20ftr, 40ftr";
+            }
+        }
+
+        // for_crating: optional; allowed values differ by delivery_type
         if (isset($data['for_crating'])) {
-            $allowedCrating = ['no', 'close', 'open'];
-
-            if (!in_array($data['for_crating'], $allowedCrating, true)) {
-                $errors['for_crating'] =
-                    "for_crating must be one of: " . implode(', ', $allowedCrating);
+            if ($deliveryType === 'gen_cargo' && !is_bool($data['for_crating'])) {
+                $errors['for_crating'] = "for_crating must be boolean for gen_cargo";
+            } elseif ($deliveryType === 'lcl' && !in_array(strtolower($data['for_crating']), ['no', 'open', 'closed'], true)) {
+                $errors['for_crating'] = "for_crating must be one of: no, open, closed for lcl";
             }
         }
 
-        // breakbulk validation
-        if (isset($data['breakbulk'])) {
-            $allowedBreakbulk = ['no', 'bb001', 'bb002'];
-
-            if (!in_array($data['breakbulk'], $allowedBreakbulk, true)) {
-                $errors['breakbulk'] =
-                    "breakbulk must be one of: " . implode(', ', $allowedBreakbulk);
+        // breakbulk: optional, validated only for lcl
+        if (isset($data['breakbulk']) && $deliveryType === 'lcl') {
+            if (!in_array(strtolower($data['breakbulk']), ['no', 'bb001', 'bb002'], true)) {
+                $errors['breakbulk'] = "breakbulk must be one of: no, bb001, bb002";
             }
         }
 
-        // boolean validation
+        // perishable: optional boolean
         if (isset($data['perishable']) && !is_bool($data['perishable'])) {
             $errors['perishable'] = "perishable must be boolean";
         }
 
-        // storage_days validation
-        if (isset($data['storage_days'])) {
-            if (
-                !is_numeric($data['storage_days']) ||
-                (int) $data['storage_days'] < 0
-            ) {
-                $errors['storage_days'] =
-                    "storage_days must be a non-negative integer";
+        // storage_days: optional, validated only for lcl
+        if (isset($data['storage_days']) && $deliveryType === 'lcl') {
+            if (!is_numeric($data['storage_days']) || (int) $data['storage_days'] < 0) {
+                $errors['storage_days'] = "storage_days must be a non-negative integer";
             }
         }
 
@@ -1214,18 +1162,6 @@ $service_type_adjusted = false;
 
                 'weight' => isset($item['weight'])
                     ? (float) $item['weight']
-                    : 0,
-
-                'max_gen_cargo_items' => isset($item['max_gen_cargo_items'])
-                    ? (int) $item['max_gen_cargo_items']
-                    : 0,
-
-                'max_lcl_items' => isset($item['max_lcl_items'])
-                    ? (int) $item['max_lcl_items']
-                    : 0,
-
-                'max_20_ftr' => isset($item['max_20_ftr'])
-                    ? (int) $item['max_20_ftr']
                     : 0,
 
                 'length' => isset($item['length'])
@@ -1300,9 +1236,17 @@ $service_type_adjusted = false;
                 ? strtolower(trim($data['fcl_type']))
                 : null,
 
-            'for_crating' => isset($data['for_crating'])
-                ? strtolower(trim($data['for_crating']))
-                : 'no',
+            'for_crating' => (function () use ($data) {
+                $deliveryType = strtolower(trim($data['delivery_type'] ?? ''));
+                if ($deliveryType === 'gen_cargo') {
+                    return isset($data['for_crating'])
+                        ? filter_var($data['for_crating'], FILTER_VALIDATE_BOOLEAN)
+                        : false;
+                }
+                return isset($data['for_crating'])
+                    ? strtolower(trim($data['for_crating']))
+                    : 'no';
+            })(),
 
             'breakbulk' => isset($data['breakbulk'])
                 ? strtolower(trim($data['breakbulk']))
