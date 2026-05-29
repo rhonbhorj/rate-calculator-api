@@ -231,7 +231,7 @@ class Calculator extends REST_Controller
 
     private function calculateGenCargo($data, $origin, $destination)
     {
-    
+
 
         $isOSA = $origin['fwd'] === 'OSA';
         if ($isOSA) {
@@ -369,11 +369,20 @@ class Calculator extends REST_Controller
                 $resData['awb_fee'] = $rate;
             }
 
-            if ($name === 'Crating-first25' && $data['for_crating'] === true) {
+            if (
+                $name === 'Crating-first25'
+                && $data['for_crating'] != 'no'
+                && $data['crated']
+            ) {
                 $resData['crating_fee'] = $rate;
             }
 
-            if ($name === 'Crating-excess' && $data['for_crating'] === true && $data['weight'] > 25) {
+            if (
+                $name === 'Crating-excess'
+                && $data['for_crating'] != 'no'
+                && $data['weight'] > 25
+                && $data['crated']
+            ) {
                 $excessWeight = $data['weight'] - 25;
                 $resData['crating_fee'] += $excessWeight * $rate;
             }
@@ -433,14 +442,14 @@ class Calculator extends REST_Controller
             ];
         }
 
-        
+
         $isOsa = $destination['fwd'] === 'OSA';
-$service_type_adjusted = false; 
+        $service_type_adjusted = false;
 
         if ($isOsa && ($data['service_type'] === 'p2d' || $data['service_type'] === 'd2d')) {
-            if($data['service_type'] === 'p2d'){
-                $data['service_type']  = 'p2p';
-            }elseif($data['service_type'] === 'd2d'){
+            if ($data['service_type'] === 'p2d') {
+                $data['service_type'] = 'p2p';
+            } elseif ($data['service_type'] === 'd2d') {
                 $data['service_type'] = 'd2p';
             }
 
@@ -463,7 +472,6 @@ $service_type_adjusted = false;
             'fcl_type' => $fclTypeName,
             'shippingFeeBreakdown' => $fclCalculations['shipping_fee_breakdown'],
             'total_delivery_fee' => $fclCalculations['total_delivery_fee'],
-            'service_type_adjusted' => $service_type_adjusted
         ];
     }
 
@@ -636,15 +644,15 @@ $service_type_adjusted = false;
 
         // Service type flags
         $serviceType = $data['service_type'];
-        $isDoorOrigin = in_array($serviceType, ['D2D', 'D2P']);
-        $isDoorDest = in_array($serviceType, ['D2D', 'P2D']);
+        $isDoorOrigin = in_array($serviceType, ['d2d', 'd2p']);
+        $isDoorDest = in_array($serviceType, ['d2d', 'p2d']);
 
         // OTD fee applies only if destination address is not found at all
         $isOtd = ($destination['fwd'] === 'OTD') && $isDoorDest;
 
         // If destination is OSA, door delivery (D2D, P2D) is not allowed
         if ($destination['fwd'] === 'OSA') {
-            if (in_array($serviceType, ['D2D', 'P2D'])) {
+            if (in_array($serviceType, ['d2d', 'p2d'])) {
                 return [
                     'status' => 'error',
                     'message' => 'Door delivery is not available for out of service area destinations. Please select P2P or D2P.'
@@ -790,7 +798,7 @@ $service_type_adjusted = false;
             }
 
             // ── OPEN CRATING ──
-            if ($data['for_crating'] === 'open') {
+            if ($data['for_crating'] === 'open' && $data['crated']) {
                 if ($name === 'Crating (Open) - Until 0.75 CBM') {
                     $resData['crating_fee'] = $rate; // flat 700 or base for excess
                 }
@@ -805,7 +813,7 @@ $service_type_adjusted = false;
             }
 
             // ── CLOSED CRATING ──
-            if ($data['for_crating'] === 'closed') {
+            if ($data['for_crating'] === 'closed' && $data['crated']) {
                 if ($name === 'Crating (Close) - Until 0.48 CBM') {
                     $resData['crating_fee'] = $rate; // flat 900 or base for excess
                 }
@@ -853,6 +861,7 @@ $service_type_adjusted = false;
             $resData['breakbulk'];
 
         $resData['tfi'] = $tfiBase * $tfiRate;
+
 
         // VAT base — includes all charges + TFI
         $vatBase =
@@ -1040,11 +1049,7 @@ $service_type_adjusted = false;
             'destination',
             'items',
             'declared_value',
-            'service_type',
-            'for_crating',
-            'breakbulk',
-            'perishable',
-            'storage_days',
+            'service_type'
         ];
 
         foreach ($required as $field) {
@@ -1093,7 +1098,8 @@ $service_type_adjusted = false;
                         'length',
                         'width',
                         'height',
-                        'quantity'
+                        'quantity',
+                        'min_items_for_crating'
                     ];
 
                     foreach ($itemRequired as $field) {
@@ -1115,7 +1121,7 @@ $service_type_adjusted = false;
                         'max_gen_cargo_items',
                         'max_lcl_items',
                         'max_20_ftr',
-                        'quantity'
+                        'quantity',
                     ];
 
                     foreach ($positiveIntegerFields as $field) {
@@ -1145,6 +1151,44 @@ $service_type_adjusted = false;
                         $errors["{$itemPath}.weight"] =
                             "weight must be greater than 0 in item " . ($index + 1);
                     }
+
+
+
+                    // for_crating validation
+                    if (isset($item['for_crating'])) {
+                        $allowedCrating = ['no', 'closed', 'open'];
+
+                        if (!in_array($item['for_crating'], $allowedCrating, true)) {
+                            $errors['for_crating'] =
+                                "for_crating must be one of: " . implode(', ', $allowedCrating);
+                        }
+                    }
+
+                    // breakbulk validation
+                    if (isset($item['breakbulk'])) {
+                        $allowedBreakbulk = ['no', 'bb001', 'bb002'];
+
+                        if (!in_array($item['breakbulk'], $allowedBreakbulk, true)) {
+                            $errors['breakbulk'] =
+                                "breakbulk must be one of: " . implode(', ', $allowedBreakbulk);
+                        }
+                    }
+
+                    // boolean validation
+                    if (isset($item['perishable']) && !is_bool($item['perishable'])) {
+                        $errors['perishable'] = "perishable must be boolean";
+                    }
+
+                    // storage_days validation
+                    if (isset($item['storage_days'])) {
+                        if (
+                            !is_numeric($item['storage_days']) ||
+                            (int) $item['storage_days'] < 0
+                        ) {
+                            $errors['storage_days'] =
+                                "storage_days must be a non-negative integer";
+                        }
+                    }
                 }
             }
         }
@@ -1166,54 +1210,70 @@ $service_type_adjusted = false;
                     "service_type must be one of: " . implode(', ', $allowedServiceTypes);
             }
         }
-        
-
-        // for_crating validation
-        if (isset($data['for_crating'])) {
-            $allowedCrating = ['no', 'close', 'open'];
-
-            if (!in_array($data['for_crating'], $allowedCrating, true)) {
-                $errors['for_crating'] =
-                    "for_crating must be one of: " . implode(', ', $allowedCrating);
-            }
-        }
-
-        // breakbulk validation
-        if (isset($data['breakbulk'])) {
-            $allowedBreakbulk = ['no', 'bb001', 'bb002'];
-
-            if (!in_array($data['breakbulk'], $allowedBreakbulk, true)) {
-                $errors['breakbulk'] =
-                    "breakbulk must be one of: " . implode(', ', $allowedBreakbulk);
-            }
-        }
-
-        // boolean validation
-        if (isset($data['perishable']) && !is_bool($data['perishable'])) {
-            $errors['perishable'] = "perishable must be boolean";
-        }
-
-        // storage_days validation
-        if (isset($data['storage_days'])) {
-            if (
-                !is_numeric($data['storage_days']) ||
-                (int) $data['storage_days'] < 0
-            ) {
-                $errors['storage_days'] =
-                    "storage_days must be a non-negative integer";
-            }
-        }
 
         return $errors;
     }
-    private function normalizeShippingData(array $data): array
+    private function normalizeShippingData(array $data)
     {
+        $forCrating = 'no';
+        $breakbulk = 'no';
+        $perishable = false;
+        $storageDays = 0;
+        $crated = false;
+
+        $itemsRaw = $data['items'] ?? [];
+
+        foreach ($itemsRaw as $item) {
+
+            if (
+                isset($item['for_crating']) &&
+                $item['for_crating'] !== 'no' &&
+                $forCrating === 'no'
+            ) {
+                $forCrating = strtolower(trim($item['for_crating']));
+                if (
+                    $item['quantity'] >= $item['min_items_for_crating']
+                    && $crated === false
+                ) {
+                    $crated = true;
+                }
+            }
+
+            if (
+                isset($item['breakbulk']) &&
+                $item['breakbulk'] !== 'no' &&
+                $breakbulk === 'no'
+            ) {
+                $breakbulk = strtolower(trim($item['breakbulk']));
+            }
+
+            if (!empty($item['perishable'])) {
+                $perishable = true;
+            }
+
+            if (isset($item['storage_days']) && is_numeric($item['storage_days'])) {
+                $storageDays = max($storageDays, (int) $item['storage_days']);
+            }
+        }
+
         $items = array_map(function ($item) {
 
             return [
 
                 'weight' => isset($item['weight'])
                     ? (float) $item['weight']
+                    : 0,
+
+                'length' => isset($item['length'])
+                    ? (float) $item['length']
+                    : 0,
+
+                'width' => isset($item['width'])
+                    ? (float) $item['width']
+                    : 0,
+
+                'height' => isset($item['height'])
+                    ? (float) $item['height']
                     : 0,
 
                 'max_gen_cargo_items' => isset($item['max_gen_cargo_items'])
@@ -1228,24 +1288,13 @@ $service_type_adjusted = false;
                     ? (int) $item['max_20_ftr']
                     : 0,
 
-                'length' => isset($item['length'])
-                    ? (int) $item['length']
-                    : 0,
-
-                'width' => isset($item['wudth'])
-                    ? (int) $item['width']
-                    : 0,
-
-                'height' => isset($item['height'])
-                    ? (int) $item['height']
-                    : 0,
-
                 'quantity' => isset($item['quantity'])
                     ? (int) $item['quantity']
                     : 1,
             ];
 
-        }, $data['items'] ?? []);
+        }, $itemsRaw);
+
 
         return [
 
@@ -1253,8 +1302,8 @@ $service_type_adjusted = false;
                 'brgy' => trim($data['origin']['brgy'] ?? ''),
                 'city' => trim($data['origin']['city'] ?? ''),
                 'province' => trim(
-                    $data['origin']['Province']
-                    ?? $data['origin']['province']
+                    $data['origin']['province']
+                    ?? $data['origin']['Province']
                     ?? ''
                 ),
             ],
@@ -1263,8 +1312,8 @@ $service_type_adjusted = false;
                 'brgy' => trim($data['destination']['brgy'] ?? ''),
                 'city' => trim($data['destination']['city'] ?? ''),
                 'province' => trim(
-                    $data['destination']['Province']
-                    ?? $data['destination']['province']
+                    $data['destination']['province']
+                    ?? $data['destination']['Province']
                     ?? ''
                 ),
             ],
@@ -1285,28 +1334,12 @@ $service_type_adjusted = false;
                 ? strtolower(trim($data['service_type']))
                 : null,
 
-            'perishable' => isset($data['perishable'])
-                ? filter_var(
-                    $data['perishable'],
-                    FILTER_VALIDATE_BOOLEAN
-                )
-                : false,
-
-            'storage_days' => isset($data['storage_days'])
-                ? (int) $data['storage_days']
-                : 0,
-
-            'fcl_type' => isset($data['fcl_type'])
-                ? strtolower(trim($data['fcl_type']))
-                : null,
-
-            'for_crating' => isset($data['for_crating'])
-                ? strtolower(trim($data['for_crating']))
-                : 'no',
-
-            'breakbulk' => isset($data['breakbulk'])
-                ? strtolower(trim($data['breakbulk']))
-                : 'no',
+            // aggregated shipment-level values
+            'for_crating' => $forCrating,
+            'breakbulk' => $breakbulk,
+            'perishable' => $perishable,
+            'storage_days' => $storageDays,
+            'crated' => $crated
         ];
     }
 }

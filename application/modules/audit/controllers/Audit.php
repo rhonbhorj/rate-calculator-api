@@ -85,8 +85,6 @@ class Audit extends REST_Controller
         }
     }
 
-
-
   
 
     public function audit_logs_post()
