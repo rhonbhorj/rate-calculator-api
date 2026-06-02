@@ -47,7 +47,11 @@ class Calculation_request_model extends CI_Model
 
                 'uom' => $item['uom'],
                 'qty' => $item['quantity'],
-                'perishable' => $item['perishable']
+                'perishable' => $item['perishable'],
+
+                'item_name' => $item['item_name'],
+                'seller_name' => $item['seller_name'],
+                'image_url' => $item['image_url']
             ];
         }
 

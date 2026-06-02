@@ -218,14 +218,20 @@ class Calculation_request extends REST_Controller
                     }
 
                     // required fields based on your new payload
-                    $itemRequired = [
+                    $itemRequiredNumeric = [
                         'weight',
                         'length',
                         'width',
                         'height',
                         'quantity',
                     ];
-                    foreach ($itemRequired as $field) {
+
+                    $itemRequiredString = [
+                        'item_name',
+                        'seller_name',
+                    ];
+
+                    foreach ($itemRequiredNumeric as $field) {
 
                         if (!isset($item[$field])) {
 
@@ -239,6 +245,20 @@ class Calculation_request extends REST_Controller
                         }
                     }
 
+                    foreach ($itemRequiredString as $field) {
+
+                        if (!isset($item[$field]) || trim($item[$field]) === '') {
+
+                            $errors["{$itemPath}.{$field}"] =
+                                "$field is required in item " . ($index + 1);
+
+                        } elseif (!is_string($item[$field])) {
+
+                            $errors["{$itemPath}.{$field}"] =
+                                "$field must be a string in item " . ($index + 1);
+                        }
+                    }
+
                     // optional perishable validation
                     if (
                         isset($item['perishable']) &&
@@ -246,6 +266,13 @@ class Calculation_request extends REST_Controller
                     ) {
                         $errors["{$itemPath}.perishable"] =
                             "perishable must be boolean";
+                    }
+
+                    if (isset($item['image_url']) && !empty($item['image_url'])) {
+
+                        if (!filter_var($item['image_url'], FILTER_VALIDATE_URL)) {
+                            $errors["{$itemPath}.image_url"] = "image_url must be a valid URL";
+                        }
                     }
 
                     // optional uom validation
@@ -322,6 +349,17 @@ class Calculation_request extends REST_Controller
                         FILTER_VALIDATE_BOOLEAN
                     )
                     : false,
+                'item_name' => isset($item['item_name'])
+                    ? trim($item['item_name'])
+                    : '',
+
+                'seller_name' => isset($item['seller_name'])
+                    ? trim($item['seller_name'])
+                    : '',
+                    
+                'image_url' => isset($item['image_url']) && !empty($item['image_url'])
+                    ? trim($item['image_url'])
+                    : null,
             ];
 
         }, $itemsRaw);
