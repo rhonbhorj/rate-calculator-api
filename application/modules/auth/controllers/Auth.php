@@ -43,7 +43,7 @@ class Auth extends REST_Controller
     // LOGIN
     // ─────────────────────────────────────────────
 
-    public function login_post()
+  public function login_post()
     {
         try {
             $raw_input = file_get_contents('php://input');

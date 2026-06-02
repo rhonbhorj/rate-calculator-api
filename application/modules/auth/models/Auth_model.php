@@ -43,7 +43,7 @@ class Auth_model extends CI_Model
         }
 
         return [
-            'status'    => true,
+            'status' => true,
             'insert_id' => $this->db->insert_id()
         ];
     }

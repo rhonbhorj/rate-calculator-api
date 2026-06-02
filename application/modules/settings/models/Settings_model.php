@@ -32,19 +32,14 @@ class Settings_model extends CI_Model
             $rate['origin_region'] = $this->trace_region($rate['origin_region_id']);
         }
 
-        $this->db->select('*');
-        $this->db->from('tbl_charges');
-        $this->db->where('category_id', 1);
-        $query = $this->db->get();
+        $genCarCharges = $this->get_other_charges(1);
 
-        if (!$query) {
+        if ($genCarCharges === false) {
             return [
                 'status' => false,
-                'message' => $this->db->error()
+                'message' => 'Failed to retrieve general cargo charges'
             ];
         }
-
-        $genCarCharges = $query->result_array();
 
 
         return [
@@ -53,7 +48,7 @@ class Settings_model extends CI_Model
         ];
     }
 
-    public function update_gen_car_rates($updateData, $id)
+    public function update_gen_car_rates($updateData, $id, $userId)
     {
 
         $this->db->where('gen_car_id', $id);
@@ -68,6 +63,33 @@ class Settings_model extends CI_Model
             ];
         }
 
+        $row = $query->row_array();
+
+        foreach ($updateData as $field => $newValue) {
+            $oldValue = $row[$field] ?? null;
+            $logDetails = [
+                'table_name' => 'tbl_gen_car_rates',
+                'record_id' => $id,
+                'field_name' => $field,
+                'old_value' => $oldValue,
+                'new_value' => $newValue,
+                'action' => "Updated $field from $oldValue to $newValue"
+            ];
+
+
+            // Record the log
+            $logRes = $this->record_setting_logs($logDetails, $userId);
+
+            if ($logRes['status'] === false) {
+                return [
+                    'status' => false,
+                    'message' => 'Failed to record setting log: ' . $logRes['message']
+                ];
+            }
+        }
+
+        $this->db->where('gen_car_id', $id);
+
         $update = $this->db->update('tbl_gen_car_rates', $updateData);
 
         if (!$update) {
@@ -79,7 +101,9 @@ class Settings_model extends CI_Model
 
         return [
             'status' => true,
-            'message' => 'General Cargo Rates updated successfully'
+            'message' => 'General Cargo Rates updated successfully',
+            'old_value' => $query->row_array(),
+            'new_value' => $updateData
         ];
 
     }
@@ -106,19 +130,15 @@ class Settings_model extends CI_Model
             $rate['destination_cluster'] = $this->trace_cluster($rate['destination_cluster_id']);
         }
 
-        $this->db->select('*');
-        $this->db->from('tbl_charges');
-        $this->db->where('category_id', 2);
-        $query = $this->db->get();
 
-        if (!$query) {
+        $lclCharges = $this->get_other_charges(2);
+
+        if ($lclCharges === false) {
             return [
                 'status' => false,
-                'message' => $this->db->error()
+                'message' => 'Failed to retrieve LCL charges'
             ];
         }
-
-        $lclCharges = $query->result_array();
 
         $this->db->select('*');
         $this->db->from('tbl_lcl_tfi_rates');
@@ -151,7 +171,9 @@ class Settings_model extends CI_Model
     public function update_lcl_settings($updateData, $id)
     {
 
-        if ($updateData['tfi_rate'] !== null) {
+        $tfiRateUpdated = false;
+        $lclRateUpdated = false;
+        if (isset($updateData['tfi_rate']) && $updateData['tfi_rate'] !== null) {
             $this->db->where('id', $id);
 
             $query = $this->db->get('tbl_lcl_tfi_rates');
@@ -163,6 +185,7 @@ class Settings_model extends CI_Model
                 ];
             }
 
+            $this->db->where('id', $id);
             $update = $this->db->update('tbl_lcl_tfi_rates', ['tfi_rate' => $updateData['tfi_rate']]);
 
             if (!$update) {
@@ -175,7 +198,7 @@ class Settings_model extends CI_Model
             $tfiRateUpdated = true;
         }
 
-        if ($updateData['rate_per_cbm'] !== null) {
+        if (isset($updateData['per_cbm']) && $updateData['per_cbm'] !== null) {
 
             $this->db->where('id', $id);
 
@@ -188,6 +211,7 @@ class Settings_model extends CI_Model
                 ];
             }
 
+            $this->db->where('id', $id);
             $update = $this->db->update('tbl_lcl_rates', ['per_cbm' => $updateData['per_cbm']]);
 
             if (!$update) {
@@ -198,6 +222,44 @@ class Settings_model extends CI_Model
             }
 
             $lclRateUpdated = true;
+        }
+
+        if ($lclRateUpdated) {
+            $logDetails = [
+                'table_name' => 'tbl_lcl_rates',
+                'record_id' => $id,
+                'field_name' => 'per_cbm',
+                'old_value' => $query->row_array()['per_cbm'] ?? null,
+                'new_value' => $updateData['per_cbm'] ?? null,
+                'action' => "Updated per_cbm from " . ($query->row_array()['per_cbm'] ?? null) . " to " . ($updateData['per_cbm'] ?? null)
+            ];
+
+            $logRes = $this->record_setting_logs($logDetails, $this->session->userdata('user_id') ?? null);
+            if ($logRes['status'] === false) {
+                return [
+                    'status' => false,
+                    'message' => 'Failed to record setting log: ' . $logRes['message']
+                ];
+            }
+        }
+
+        if ($tfiRateUpdated) {
+            $logDetails = [
+                'table_name' => 'tbl_lcl_tfi_rates',
+                'record_id' => $id,
+                'field_name' => 'tfi_rate',
+                'old_value' => $query->row_array()['tfi_rate'] ?? null,
+                'new_value' => $updateData['tfi_rate'] ?? null,
+                'action' => "Updated tfi_rate from " . ($query->row_array()['tfi_rate'] ?? null) . " to " . ($updateData['tfi_rate'] ?? null)
+            ];
+
+            $logRes = $this->record_setting_logs($logDetails, $this->session->userdata('user_id') ?? null);
+            if ($logRes['status'] === false) {
+                return [
+                    'status' => false,
+                    'message' => 'Failed to record setting log: ' . $logRes['message']
+                ];
+            }
         }
 
         return [
@@ -214,7 +276,119 @@ class Settings_model extends CI_Model
 
     }
 
+    // FCL SETTINGS
+    public function get_fcl_rates()
+    {
+        $this->db->select('*');
+        $this->db->from('tbl_fcl_rates');
+        $query = $this->db->get();
+
+        if (!$query) {
+            return [
+                'status' => false,
+                'message' => $this->db->error()
+            ];
+        }
+
+        $fclCharges['20ftr'] = $this->get_other_charges(3);
+
+        if ($fclCharges['20ftr'] === false) {
+            return [
+                'status' => false,
+                'message' => 'Failed to retrieve FCL charges'
+            ];
+        }
+
+        $fclCharges['40ftr'] = $this->get_other_charges(4);
+
+        if ($fclCharges['40ftr'] === false) {
+            return [
+                'status' => false,
+                'message' => 'Failed to retrieve FCL charges'
+            ];
+        }
+
+        $charges = array_merge($fclCharges['20ftr'], $fclCharges['40ftr']);
+
+        return [
+            'rates' => $query->result_array(),
+            'charges' => $charges,
+        ];
+    }
+
+
+    public function update_fcl_rates($updateData, $id, $userId)
+    {
+        $this->db->where('id', $id);
+
+        $query = $this->db->get('tbl_fcl_rates');
+
+        if (!$query || $query->num_rows() === 0) {
+            return [
+                'status' => false,
+                'message' => 'FCL rate not found'
+            ];
+        }
+
+        $this->db->where('id', $id);
+        $update = $this->db->update('tbl_fcl_rates', $updateData);
+
+        if (!$update) {
+            return [
+                'status' => 'false',
+                'message' => $this->db->error()
+            ];
+        }
+
+        $row = $query->row_array();
+        foreach ($updateData as $field => $newValue) {
+            $oldValue = $row[$field] ?? null;
+            $logDetails = [
+                'table_name' => 'tbl_fcl_rates',
+                'record_id' => $id,
+                'field_name' => $field,
+                'old_value' => $oldValue,
+                'new_value' => $newValue,
+                'action' => "Updated $field from $oldValue to $newValue"
+            ];
+
+
+            // Record the log
+            $logRes = $this->record_setting_logs($logDetails, $userId);
+
+            if ($logRes['status'] === false) {
+                return [
+                    'status' => false,
+                    'message' => 'Failed to record setting log: ' . $logRes['message']
+                ];
+            }
+        }
+
+        return [
+            'status' => true,
+            'message' => 'FCL Rates updated successfully'
+        ];
+
+    }
+
+
     // OTHER CHARGES SETTINGS
+    private function get_other_charges($category_id)
+    {
+        $this->db->where('category_id', $category_id);
+        $query = $this->db->get('tbl_charges');
+
+        if (!$query) {
+            return [
+                'status' => false,
+                'message' => $this->db->error()
+            ];
+        }
+
+        return $query->result_array();
+    }
+
+
     public function update_other_charges($updateData, $id)
     {
 
@@ -239,6 +413,25 @@ class Settings_model extends CI_Model
             ];
         }
 
+        $logDetails = [
+            'table_name' => 'tbl_charges',
+            'record_id' => $id,
+            'field_name' => 'charge_rate',
+            'old_value' => $query->row_array()['charge_rate'] ?? null,
+            'new_value' => $updateData['charge_rate'] ?? null,
+            'action' => "Updated charge_rate from " . ($query->row_array()['charge_rate'] ?? null) . " to " . ($updateData['charge_rate'] ?? null)
+        ];
+
+        $logRes = $this->record_setting_logs($logDetails, $this->session->userdata('user_id') ?? null);
+
+        if ($logRes['status'] === false) {
+            return [
+                'status' => false,
+                'message' => 'Failed to record setting log: ' . $logRes['message']
+            ];
+        }
+
+
         return [
             'status' => true,
             'message' => 'Other Charge updated successfully'
@@ -246,8 +439,7 @@ class Settings_model extends CI_Model
 
     }
 
-
-
+    // TRACE FUNCTIONS
     private function trace_region($region_id)
     {
         $this->db->select('region_name');
@@ -275,5 +467,31 @@ class Settings_model extends CI_Model
         }
 
         return $query->row()->cluster_name;
+    }
+
+    // LOGS FUNCTION
+    private function record_setting_logs($details, $userId)
+    {
+        $query = $this->db->insert('tbl_setting_logs', [
+            'table_name' => $details['table_name'] ?? 'unknown_table',
+            'record_id' => $details['record_id'] ?? null,
+            'field_name' => $details['field_name'] ?? null,
+            'old_value' => $details['old_value'] ?? null,
+            'new_value' => $details['new_value'] ?? null,
+            'user_id' => $userId,
+            'action' => $details['action'] ?? null,
+        ]);
+
+        if (!$query) {
+            return [
+                'status' => false,
+                'message' => $this->db->error()
+            ];
+        }
+
+        return [
+            'status' => true,
+            'message' => 'Setting log recorded successfully'
+        ];
     }
 }
