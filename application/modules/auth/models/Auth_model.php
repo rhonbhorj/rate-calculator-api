@@ -10,7 +10,6 @@ class Auth_model extends CI_Model
     public function login($email, $password)
     {
         $this->db->where('email', $email);
-        $this->db->where('password', $password);
         $this->db->where('is_active', 1);
 
         $query = $this->db->get('tbl_auth_users');
@@ -19,7 +18,17 @@ class Auth_model extends CI_Model
             return $this->db->error();
         }
 
-        return $query->num_rows() > 0 ? $query->row_array() : false;
+        if ($query->num_rows() == 0) {
+            return false;
+        }
+
+        $user = $query->row_array();
+
+        if (!password_verify($password, $user['password'])) {
+            return false;
+        }
+
+        return $user;
     }
 
     public function createUser($data)
@@ -78,5 +87,19 @@ class Auth_model extends CI_Model
         }
 
         return $query->num_rows() > 0 ? $query->row_array() : false;
+    }
+
+    public function getAllCsr()
+    {
+        $this->db->where('role', 'csr');
+        $this->db->select('id, name, email, is_active, role, created_at, updated_at');
+
+        $query = $this->db->get('tbl_auth_users');
+
+        if (!$query) {
+            return $this->db->error();
+        }
+
+        return $query->num_rows() > 0 ? $query->result_array() : [];
     }
 }

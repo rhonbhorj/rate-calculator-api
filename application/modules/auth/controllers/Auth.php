@@ -82,7 +82,7 @@ class Auth extends REST_Controller
             }
 
             $pdata['email']    = strip_tags(trim($data['email']));
-            $pdata['password'] = md5(strip_tags(trim($data['password'])));
+            $pdata['password'] = strip_tags(trim($data['password']));
 
             $user = $this->modelrepo->login($pdata['email'], $pdata['password']);
 
@@ -234,7 +234,7 @@ class Auth extends REST_Controller
             $pdata = [
                 'name'      => strip_tags(trim($data['name'])),
                 'email'     => strip_tags(trim($data['email'])),
-                'password'  => md5(strip_tags(trim($data['password']))),
+                'password'  => password_hash(strip_tags(trim($data['password'])), PASSWORD_BCRYPT),
                 'role'      => 'csr',
                 'is_active' => 1
             ];
@@ -329,6 +329,13 @@ class Auth extends REST_Controller
                 ], REST_Controller::HTTP_BAD_REQUEST);
             }
 
+            if ($user['role'] === 'admin') {
+                return $this->response([
+                    'status'  => false,
+                    'message' => 'Cannot update the status of an admin account'
+                ], REST_Controller::HTTP_BAD_REQUEST);
+            }
+
             $pdata['id']        = (int) $data['id'];
             $pdata['is_active'] = (int) $data['is_active'];
 
@@ -348,6 +355,37 @@ class Auth extends REST_Controller
                     'id'        => $pdata['id'],
                     'is_active' => $pdata['is_active']
                 ]
+            ], REST_Controller::HTTP_OK);
+
+        } catch (Exception $e) {
+            return $this->response([
+                'status'  => false,
+                'message' => 'Server error',
+                'details' => $e->getMessage()
+            ], REST_Controller::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    // GET ALL CSR USERS
+    // ─────────────────────────────────────────────
+
+    public function get_all_csr_get()
+    {
+        try {
+            // Admin only
+            if (!$this->session->userdata('logged_in') || $this->session->userdata('role') !== 'admin') {
+                return $this->response([
+                    'status'  => false,
+                    'message' => 'Unauthorized. Admin access only.'
+                ], REST_Controller::HTTP_UNAUTHORIZED);
+            }
+
+            $csr = $this->modelrepo->getAllCsr();
+
+            return $this->response([
+                'status' => true,
+                'data'   => $csr
             ], REST_Controller::HTTP_OK);
 
         } catch (Exception $e) {
