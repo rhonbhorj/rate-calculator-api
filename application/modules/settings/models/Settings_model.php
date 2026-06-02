@@ -389,7 +389,7 @@ class Settings_model extends CI_Model
     }
 
 
-    public function update_other_charges($updateData, $id)
+    public function update_other_charges($updateData, $id, $userId)
     {
 
         $this->db->where('charge_id', $id);
@@ -404,6 +404,7 @@ class Settings_model extends CI_Model
             ];
         }
 
+        $this->db->where('charge_id', $id);
         $update = $this->db->update('tbl_charges', $updateData);
 
         if (!$update) {
@@ -413,16 +414,18 @@ class Settings_model extends CI_Model
             ];
         }
 
+        $row = $query->row_array();
         $logDetails = [
             'table_name' => 'tbl_charges',
             'record_id' => $id,
+            'user_id' => $userId,
             'field_name' => 'charge_rate',
-            'old_value' => $query->row_array()['charge_rate'] ?? null,
+            'old_value' => $row['charge_rate'] ?? null,
             'new_value' => $updateData['charge_rate'] ?? null,
-            'action' => "Updated charge_rate from " . ($query->row_array()['charge_rate'] ?? null) . " to " . ($updateData['charge_rate'] ?? null)
+            'action' => "Updated charge_rate from " . ($row['charge_rate'] ?? null) . " to " . ($updateData['charge_rate'] ?? null)
         ];
 
-        $logRes = $this->record_setting_logs($logDetails, $this->session->userdata('user_id') ?? null);
+        $logRes = $this->record_setting_logs($logDetails, $userId);
 
         if ($logRes['status'] === false) {
             return [
@@ -435,6 +438,77 @@ class Settings_model extends CI_Model
         return [
             'status' => true,
             'message' => 'Other Charge updated successfully'
+        ];
+
+    }
+
+    // NGSI SETTINGS
+    public function get_ngsi_settings()
+    {
+        $this->db->select('*');
+        $this->db->from('tbl_ngsi_rates');
+        $query = $this->db->get();
+
+        if (!$query) {
+            return [
+                'status' => false,
+                'message' => $this->db->error()
+            ];
+        }
+
+        return $query->result_array();
+    }
+
+    public function update_ngsi_settings($updateData, $id, $userId)
+    {
+        $this->db->where('id', $id);
+
+        $query = $this->db->get('tbl_ngsi_rates');
+
+        if (!$query || $query->num_rows() === 0) {
+            return [
+                'status' => false,
+                'message' => 'NGSI setting not found'
+            ];
+        }
+
+        $this->db->where('id', $id);
+        $update = $this->db->update('tbl_ngsi_rates', $updateData);
+
+        if (!$update) {
+            return [
+                'status' => 'false',
+                'message' => $this->db->error()
+            ];
+        }
+
+        $row = $query->row_array();
+
+        foreach ($updateData as $field => $newValue) {
+            $oldValue = $row[$field] ?? null;
+            $logDetails = [
+                'table_name' => 'tbl_ngsi_rates',
+                'record_id' => $id,
+                'field_name' => $field,
+                'old_value' => $oldValue,
+                'new_value' => $newValue,
+                'action' => "Updated $field from $oldValue to $newValue"
+            ];
+
+            // Record the log
+            $logRes = $this->record_setting_logs($logDetails, $userId);
+
+            if ($logRes['status'] === false) {
+                return [
+                    'status' => false,
+                    'message' => 'Failed to record setting log: ' . $logRes['message']
+                ];
+            }
+        }
+
+        return [
+            'status' => true,
+            'message' => 'NGSI setting updated successfully'
         ];
 
     }
