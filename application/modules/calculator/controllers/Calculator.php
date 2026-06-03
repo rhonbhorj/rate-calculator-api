@@ -14,7 +14,7 @@ class Calculator extends REST_Controller
 {
     /**
      * @var Calculator_model
-     */
+     */ 
     public $modelrepo;
 
     public function __construct()
