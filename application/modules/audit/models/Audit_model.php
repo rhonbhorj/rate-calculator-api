@@ -12,9 +12,9 @@ class Audit_model extends CI_Model
         parent::__construct();
     }
 
-    public function chkOrderId($orderId, $userId)
+    public function chkOrderId($request_id, $userId)
     {
-        $this->db->where('order_id', $orderId);
+        $this->db->where('request_id', $request_id);
         $this->db->where('user_id', $userId);
 
         $query = $this->db->get('tbl_audit_logs');
@@ -45,14 +45,33 @@ class Audit_model extends CI_Model
 
     public function recordAuditLog($data)
     {
+        $requestId = isset($data['request_id']) ? $data['request_id'] : null;
+
+        $this->db->where('request_id', $requestId);
+        $this->db->where('status', 'pending');
+
+        $existingRequest = $this->db->get('tbl_requests')->row_array();
+
+        if (!$existingRequest) {
+            return [
+                'status' => false,
+                'message' => 'Calculation request not found.'
+            ];
+        }
+
+
+
         $query = $this->db->insert('tbl_audit_logs', $data);
 
         if (!$query) {
             return [
                 'status' => false,
-                'errors' => $this->db->error()
+                'message' => $this->db->error()
             ];
         }
+
+        $this->db->where('request_id', $requestId);
+        $this->db->update('tbl_requests', ['status' => 'success']);
 
         return [
             'status' => true,
@@ -89,11 +108,11 @@ class Audit_model extends CI_Model
             );
         }
 
-          if (isset($filters['ngsi_rate'])) {
+        if (isset($filters['ngsi_rate'])) {
             $this->db->where(
                 'ngsi_rate',
                 $filters['ngsi_rate']
-                
+
             );
         }
 

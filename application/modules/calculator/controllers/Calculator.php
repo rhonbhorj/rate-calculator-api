@@ -500,7 +500,7 @@ class Calculator extends REST_Controller
             if ($data['service_type'] === 'p2d') {
                 $data['service_type'] = 'p2p';
             } elseif ($data['service_type'] === 'd2d') {
-                $data['service_type'] = 'd2p';
+                $data['service_type'] = 'd2p'; 
             }
 
             $service_type_adjusted = true;
@@ -590,16 +590,7 @@ class Calculator extends REST_Controller
         // OTD fee applies only if destination address is not found at all
         $isOtd = ($destination['fwd'] === 'OTD') && $isDoorDest;
 
-        // If destination is OSA, door delivery (D2D, P2D) is not allowed
-        if ($destination['fwd'] === 'OSA') {
-            if (in_array($serviceType, ['D2D', 'P2D'])) {
-                return [
-                    'status' => 'error',
-                    'message' => 'Door delivery is not available for out of service area destinations. Please select P2P or D2P.'
-                ];
-            }
-        }
-
+       
         // Weight charge — full precision CBM
         $weightCharge = $cbm * (float) $lclRate['per_cbm'];
 
@@ -633,7 +624,7 @@ class Calculator extends REST_Controller
                 'otd' => $isOtd ? 'Yes' : 'No',
                 'cbm' => round($cbm, 2),
                 'rate_per_cbm' => round($lclRate['per_cbm'], 2),
-            ],
+            ],  
             'service_type_adjusted' => $service_type_adjusted,
             'service_type' => $data['service_type'],
             'shippingFeeBreakdown' => $breakdown['shipping_breakdown'],

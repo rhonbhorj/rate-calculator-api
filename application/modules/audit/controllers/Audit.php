@@ -111,7 +111,7 @@ class Audit extends REST_Controller
 
             $errors = [];
 
-            if (empty($data['order_id']) || !is_numeric($data['order_id'])) {
+            if (empty($data['request_id']) || !is_numeric($data['request_id'])) {
                 $errors['order_id'] = 'order_id is required and must be numeric';
             }
 
@@ -127,6 +127,12 @@ class Audit extends REST_Controller
                 $errors['delivery_type'] = 'Invalid delivery_type. Accepted values: ' . implode(', ', $validDeliveryTypes);
             }
 
+            if(empty($data['action'] )){
+                $errors['action'] = 'action is required';
+            } elseif (!in_array($data['action'], ['success', 'fail'])) {
+                $errors['action'] = 'Invalid action. Accepted values: success, fail';
+            }
+
             if (!empty($errors)) {
                 return $this->response([
                     'status' => 'error',
@@ -139,11 +145,11 @@ class Audit extends REST_Controller
             $userId = $head['user_id'];
 
             // Sanitize
-            $pdata['order_id'] = (int) $data['order_id'];
+            $pdata['request_id'] = (int) $data['request_id'];
             $pdata['total_shipping_cost'] = (float) $data['total_shipping_cost'];
             $pdata['delivery_type'] = strip_tags(trim($data['delivery_type']));
-
-            $duplicateId = $this->modelrepo->chkOrderId($pdata['order_id'], $userId);
+            $pdata['action'] = strip_tags(trim($data['action']));
+            $duplicateId = $this->modelrepo->chkOrderId($pdata['request_id'], $userId);
 
             if ($duplicateId) {
                 $this->response([
@@ -156,14 +162,15 @@ class Audit extends REST_Controller
             $ngsiRate = $this->modelrepo->fetchNgsiRate();
 
             $log_data = [
-                'order_id' => $pdata['order_id'],
+                'request_id' => $pdata['request_id'],
                 'user_id' => $userId,
                 'total_shipping_cost' => $pdata['total_shipping_cost'],
                 'delivery_type' => $pdata['delivery_type'],
                 "original_fee" => 0,
                 "additional_fee" => 0,
                 "with_ngsi_additional" => 0,
-                "ngsi_rate" => 20
+                "ngsi_rate" => 0,
+                'action' => $pdata['action']
             ];
 
 
@@ -180,7 +187,7 @@ class Audit extends REST_Controller
             if ($res['status'] == false) {
                 $this->response([
                     'status' => 'error',
-                    'message' => $res['errors']
+                    'message' => $res['message']
                 ], REST_Controller::HTTP_BAD_REQUEST);
             }
 
